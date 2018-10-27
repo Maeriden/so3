@@ -3,67 +3,107 @@
 static const unsigned char base64_table[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                               "abcdefghijklmnopqrstuvwxyz"
                                               "0123456789+/";
+
+static const unsigned char dtable[256] = {
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, //   0 -  15
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, //  16 -  31
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,   62, 0x80, 0x80, 0x80,   63, //  32 -  47
+	  52,   53,   54,   55,   56,   57,   58,   59,   60,   61, 0x80, 0x80, 0x80,    0, 0x80, 0x80, //  48 -  63
+	0x80,    0,    1,    2,    3,    4,    5,    6,    7,    8,    9,   10,   11,   12,   13,   14, //  64 -  79
+	  15,   16,   17,   18,   19,   20,   21,   22,   23,   24,   25, 0x80, 0x80, 0x80, 0x80, 0x80, //  80 -  95
+	0x80,   26,   27,   28,   29,   30,   31,   32,   33,   34,   35,   36,   37,   38,   39,   40, //  96 - 111
+	  41,   42,   43,   44,   45,   46,   47,   48,   49,   50,   51, 0x80, 0x80, 0x80, 0x80, 0x80, // 112 - 127
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+};
+
+
+
+
 /**
  * base64_decode - Base64 decode
- * @src: Data to be decoded
- * @len: Length of the data to be decoded
+ * @source: Data to be decoded
+ * @source_len: Length of the data to be decoded
  * @out_len: Pointer to output length variable
- * Returns: Allocated buffer of out_len bytes of decoded data,
- * or %NULL on failure
+ * Returns: Allocated buffer of out_len bytes of decoded data, or %NULL on failure
  *
  * Caller is responsible for freeing the returned buffer.
  */
-unsigned char * base64_decode(const unsigned char *src, size_t len,
-			      size_t *out_len)
+unsigned char* base64_decode(const unsigned char* source, size_t source_len, size_t *out_len)
 {
-	unsigned char dtable[256], *out, *pos, block[4], tmp;
-	size_t i, count, olen;
-	int pad = 0;
+	//char a = 'A';
+	//char a = 'Z';
+	//char a = 'a';
+	//char a = 'z';
+	//char a = '0';
+	//char a = '9';
+	//char a = '+';
+	//char a = '/';
 
-	memset(dtable, 0x80, 256);
-	for (i = 0; i < sizeof(base64_table) - 1; i++)
-		dtable[base64_table[i]] = (unsigned char) i;
+	unsigned char dtable[256] = {0x80};
+	//memset(dtable, 0x80, 256);
+	for(size_t i = 0; i < 64; i++)
+	{
+		int di = base64_table[i];
+		dtable[di] = i;
+	}
 	dtable['='] = 0;
 
-	count = 0;
-	for (i = 0; i < len; i++) {
-		if (dtable[src[i]] != 0x80)
+	size_t count = 0;
+	for(size_t i = 0; i < source_len; i++)
+	{
+		unsigned char b64_letter = source[i];
+		if(dtable[b64_letter] != 0x80)
 			count++;
 	}
 
-	if (count == 0 || count % 4)
+	if(count == 0 || count % 4)
 		return NULL;
 
-	olen = count / 4 * 3;
-	pos = out = malloc(olen);
-	if (out == NULL)
+	unsigned char* out = calloc(count / 4 * 3, 1);
+	unsigned char* pos = out;
+	if(out == NULL)
 		return NULL;
+
+	unsigned char block[4];
+	int pad = 0;
 
 	count = 0;
-	for (i = 0; i < len; i++) {
-		tmp = dtable[src[i]];
-		if (tmp == 0x80)
+	for(size_t i = 0; i < source_len; i++)
+	{
+		unsigned char b64_letter = source[i];
+		unsigned char tmp = dtable[b64_letter];
+		if(tmp == 0x80)
 			continue;
 
-		if (src[i] == '=')
+		if(b64_letter == '=')
 			pad++;
 		block[count] = tmp;
 		count++;
-		if (count == 4) {
+
+		if(count == 4)
+		{
 			*pos++ = (block[0] << 2) | (block[1] >> 4);
 			*pos++ = (block[1] << 4) | (block[2] >> 2);
 			*pos++ = (block[2] << 6) | block[3];
 			count = 0;
-			if (pad) {
-				if (pad == 1)
-					pos--;
-				else if (pad == 2)
-					pos -= 2;
-				else {
-					/* Invalid padding */
-					free(out);
-					return NULL;
-				}
+
+			if(pad > 2)
+			{
+				// Invalid padding
+				free(out);
+				return NULL;
+			}
+
+			if(pad > 0)
+			{
+				pos -= pad;
 				break;
 			}
 		}
