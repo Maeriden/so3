@@ -3,9 +3,6 @@
 #include <stdlib.h>
 
 
-#define ASSERT(c) assert(c)
-
-
 const_Str0 _errno_as_string(int err)
 {
 	switch(err) {

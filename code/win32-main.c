@@ -129,7 +129,7 @@ void thread_pool_task(void* param)
 static
 void destroy_print_module()
 {
-	if(IS_VALID_MUTEX(mutex_platform_print))
+	if(mutex_platform_print != NULL)
 		platform_mutex_destroy(&mutex_platform_print);
 }
 

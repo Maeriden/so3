@@ -43,8 +43,7 @@ void platform_print(const_Str0 file, int line, u32 level, const_Str0 prefix, con
 {
 	if(level > global_log_level)
 		return;
-
-	if(!IS_VALID_MUTEX(mutex_platform_print) || platform_mutex_acquire(&mutex_platform_print) == 0)
+	if(mutex_platform_print == NULL || WaitForSingleObject(mutex_platform_print, INFINITE) == WAIT_OBJECT_0)
 	{
 		u32 pid = _getpid();
 		fprintf(stderr, "[%5u] %s:%i %s", pid, file, line, prefix);
@@ -56,8 +55,8 @@ void platform_print(const_Str0 file, int line, u32 level, const_Str0 prefix, con
 
 		fputs("\n", stderr);
 
-		if(IS_VALID_MUTEX(mutex_platform_print))
-			platform_mutex_release(&mutex_platform_print);
+		if(mutex_platform_print != NULL)
+			ReleaseMutex(mutex_platform_print);
 	}
 }
 
