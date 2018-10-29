@@ -557,7 +557,8 @@ i32 scandir(const_Str0 dirname, struct dirent*** namelist, scandir_select_t* sel
 	} while(FindNextFile(h, &find));
 
 	unsigned long ret = GetLastError();
-	if (ret != ERROR_NO_MORE_FILES) {
+	if (ret != ERROR_NO_MORE_FILES)
+	{
 		// TODO: return some error code
 	}
 	FindClose(h);

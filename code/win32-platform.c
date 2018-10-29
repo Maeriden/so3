@@ -13,21 +13,10 @@ void* platform_memory_alloc(size_t size)
 	return calloc(size, 1);
 }
 
-void platform_memory_free(void* addr, size_t size)
+i32 platform_memory_free(void* addr, size_t size)
 {
 	if(!(addr && size)) return;
 	free(addr);
-}
-
-void* platform_memory_realloc(void* old_mem, size_t old_size, size_t new_size)
-{
-	void* new_mem = platform_memory_alloc(new_size);
-	if(new_mem)
-	{
-		memcpy(new_mem, old_mem, MIN(old_size, new_size));
-		platform_memory_free(old_mem, old_size);
-	}
-	return new_mem;
 }
 
 
@@ -114,7 +103,7 @@ i32 platform_syslog(u8 address[4], const_Str0 userid, const_Str0 method, const_S
 i32 platform_thread_init(thread_t* out_thread, thread_callback_t* callback, void* callback_arg)
 {
 	thread_t thread = CreateThread(NULL, 0, callback, callback_arg, 0, NULL);
-	if(!IS_VALID_THREAD(thread))
+	if(thread == NULL)
 		return -1;
 	*out_thread = thread;
 	return 0;
@@ -133,63 +122,13 @@ i32 platform_thread_join(thread_t* thread)
 
 
 ////////////////////////////////////////////////////////////
-// PLATFORM FUNCTIONS: MUTEX                              //
-////////////////////////////////////////////////////////////
-
-i32 platform_mutex_attr_init(mutex_attr_t* attrs)
-{
-	*attrs = (SECURITY_ATTRIBUTES){sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
-	return 0;
-}
-
-i32 platform_mutex_attr_destroy(mutex_attr_t* attrs)
-{
-	return 0;
-}
-
-i32 platform_mutex_init(mutex_t* out_mutex, mutex_attr_t* attrs, const_Str0 name)
-{
-	mutex_t mutex = CreateMutexA(attrs, FALSE, name);
-	if(!IS_VALID_MUTEX(mutex))
-		return 1;
-	*out_mutex = mutex;
-	return 0;
-}
-
-i32 platform_mutex_acquire(mutex_t* mutex)
-{
-	switch(WaitForSingleObject(*mutex, (DWORD)INFINITE)) {
-	case WAIT_OBJECT_0  : return  0;
-	case WAIT_ABANDONED : return  0;
-	case WAIT_TIMEOUT   : return -1;
-	case WAIT_FAILED    : return -1;
-	} return -1;
-}
-
-i32 platform_mutex_release(mutex_t* mutex)
-{
-	if(!ReleaseMutex(*mutex))
-		return -1;
-	return 0;
-}
-
-i32 platform_mutex_destroy(mutex_t* mutex)
-{
-	if(!CloseHandle(*mutex))
-		return -1;
-	return 0;
-}
-
-
-
-////////////////////////////////////////////////////////////
 // PLATFORM FUNCTIONS: CRITICAL SECTION                   //
 ////////////////////////////////////////////////////////////
 
-i32 platform_critsec_init(critsec_t* out_critsec, critsec_attr_t* attrs)
+i32 platform_critsec_init(critsec_t* out_critsec)
 {
 	// NOTE: Value from https://docs.microsoft.com/en-us/windows/desktop/api/synchapi/nf-synchapi-initializecriticalsectionandspincount
-	const DWORD busy_wait_ticks = (attrs != NULL) ? (*attrs) : 0x00000400;
+	const DWORD busy_wait_ticks = 0x00000400;
 	if(!InitializeCriticalSectionAndSpinCount(out_critsec, busy_wait_ticks))
 		return -1;
 	return 0;
@@ -219,7 +158,7 @@ i32 platform_critsec_destroy(critsec_t* critsec)
 // PLATFORM FUNCTIONS: CONDITION VARIABLE                 //
 ////////////////////////////////////////////////////////////
 
-i32 platform_condvar_init(condvar_t* out_condvar, condvar_attr_t* attrs)
+i32 platform_condvar_init(condvar_t* out_condvar)
 {
 	InitializeConditionVariable(out_condvar);
 	return 0;
@@ -552,7 +491,7 @@ HTTP_STATUS platform_get_resource(State* state, Str0 resource_path, u32 resource
 	*out_content      = NULL;
 	*out_content_size = 0;
 	
-	if(!(resource_path && resource_size))
+	if(!(resource_path && resource_path_len))
 		return HTTP_STATUS_NOT_FOUND;
 	ASSERT(resource_path[resource_path_len-1] != '/');
 

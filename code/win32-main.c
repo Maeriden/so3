@@ -130,7 +130,7 @@ static
 void destroy_print_module()
 {
 	if(mutex_platform_print != NULL)
-		platform_mutex_destroy(&mutex_platform_print);
+		CloseHandle(mutex_platform_print);
 }
 
 
@@ -171,9 +171,9 @@ void destroy_state(State* state)
 	state->users_count = 0;
 	state->users       = NULL;
 
-	if(IS_VALID_SOCKET(state->listen_socket_plain))
+	if(state->listen_socket_plain != INVALID_SOCKET)
 		closesocket(state->listen_socket_plain);
-	if(IS_VALID_SOCKET(state->listen_socket_crypt))
+	if(state->listen_socket_crypt != INVALID_SOCKET)
 		closesocket(state->listen_socket_crypt);
 	state->listen_socket_plain = INVALID_SOCKET;
 	state->listen_socket_crypt = INVALID_SOCKET;
@@ -266,7 +266,7 @@ static
 i32 init_threads(State* state)
 {
 	*state->thread_pool = (ThreadPool){0};
-	if(thread_pool_init(state->thread_pool, 1+state->config.extra_threads_count, thread_pool_callback) != 0)
+	if(thread_pool_init(state->thread_pool, 1+state->config.extra_threads_count) != 0)
 		return -1;
 	return 0;	
 }
@@ -591,7 +591,7 @@ i32 init_print_module()
 {
 	mutex_attr_t attrs = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
 	mutex_platform_print = CreateMutexA(&attrs, FALSE, "Local\\os3-1701014-_print_generic_mutex");
-	if(!IS_VALID_MUTEX(mutex_platform_print))
+	if(mutex_platform_print == NULL)
 		return -1;
 	return 0;
 }
