@@ -51,7 +51,7 @@ unsigned char* base64_decode(const unsigned char* source, size_t source_len, siz
 	for(size_t i = 0; i < 64; i++)
 	{
 		int di = base64_table[i];
-		dtable[di] = i;
+		dtable[di] = (unsigned char)i;
 	}
 	dtable['='] = 0;
 
