@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
+#endif
 
 #include <arpa/inet.h>
 #include <dirent.h>
@@ -25,98 +27,146 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
-#include "phr/picohttpparser.c"
 #include "inih/ini.c"
+#include "phr/picohttpparser.c"
 
 #include "platform.h"
-#include "utils.c"
 
-typedef struct State
+
+typedef struct
 {
-	// Configuration
-	u16  listen_port_plain;
+	u16  listen_port_plain;   
 	u16  listen_port_crypt;
 	u32  extra_processes_count;
 	u32  extra_threads_count;
 	b32  disable_authorization;
 	Str0 documents_root;
-	
-	// Program state
-	// DOUBT: Is volatile necessary on multi-thread variables?
+	u32  log_level;
+} Configuration;
+
+typedef struct ThreadPool ThreadPool;
+
+typedef struct State
+{
 	volatile b32 reload;
-	b32 is_slave_process;
+	b32          is_slave_process;
 	
-	u32        slaves_count;
-	pid_t*     slaves;
-	ThreadPool thread_pool;
+	Configuration config;
+	u32           users_count;
+	Str0*         users;
 	
-	// Server-specific state
-	int   listen_socket_plain;
-	int   listen_socket_crypt;
-	u32   users_count;
-	Str0* users;
+	socket_t    listen_socket_plain;
+	socket_t    listen_socket_crypt;
+	u32         slaves_count;
+	process_t*  slaves;
+	ThreadPool* thread_pool;
 } State;
 
 State global_state = {
-	.listen_port_plain     = 8080,
-	.listen_port_crypt     = 8081,
-	.extra_processes_count = 0,
-	.extra_threads_count   = 0,
-	.disable_authorization = 0,
-	.documents_root        = NULL,
+	.reload = 0,
+	.is_slave_process = 0,
 	
-	.reload                = 0,
-	.is_slave_process      = 0,
-	
+	.config = {
+		.listen_port_plain     = 8080,
+		.listen_port_crypt     = 8081,
+		.extra_processes_count = 0,
+		.extra_threads_count   = 0,
+		.disable_authorization = 0,
+		.documents_root        = NULL,
+		.log_level             = 3,
+	},
+	.users_count = 0,
+	.users       = NULL,
+
+	.listen_socket_plain = -1,
+	.listen_socket_crypt = -1,
 	.slaves_count        = 0,
 	.slaves              = NULL,
-	.thread_pool         = {},
-	
-	.listen_socket_plain   = -1,
-	.listen_socket_crypt   = -1,
-	.users_count           = 0,
-	.users                 = NULL,
+	.thread_pool         = NULL,
 };
 
 #ifndef CONFDIR
-#define CONFDIR "/tmp/os3-1701014"
+#define CONFDIR "/tmp/os3-1701014/conf"
 #endif
 
 #ifndef DOCSDIR
 #define DOCSDIR "/tmp/os3-1701014/docs"
 #endif
 
-#include "args.c"
-#include "platform-linux.c"
+#ifndef LOGSDIR
+#define LOGSDIR "/tmp/os3-1701014/logs"
+#endif
+
+
+#include "utils.c"
+#include "linux-utils.c"
+#include "linux-args.c"
+#include "linux-platform.c"
+#include "thread_pool.c"
 #include "server.c"
 
 
-static
-void _client_thread_callback_impl(State* state, int client_socket, u32 address, u16 port)
+ThreadPool global_thread_pool = {};
+
+
+typedef struct ThreadTaskArgs
 {
-	u32 encryption_key = 0;
-	if(port == state->listen_port_crypt)
-	{
-		srand(address);
-		encryption_key = rand();
-	}
-	
-	client_procedure(client_socket, encryption_key, (u8*)&address);
-	shutdown(client_socket, SHUT_RDWR);
-	close(client_socket);
-}
+	State*   state;
+	socket_t socket;
+	u32      address;
+	u16      port;
+} ThreadTaskArgs;
 
 static
-void* client_thread_callback(void* param)
+void thread_pool_task(void* param)
 {
 	ThreadTaskArgs* args = param;
 	State* state   = args->state;
 	int    socket  = args->socket;
 	u32    address = args->address;
 	u16    port    = args->port;
+	
+	u32 encryption_key = 0;
+	if(port == state->config.listen_port_crypt)
+	{
+		srand(address);
+		encryption_key = rand();
+	}
+	server_serve_client(state, socket, encryption_key, (u8*)&address);
+	shutdown(socket, SOCKET_SHUTDOWN_RW);
+	close(socket);
+	
 	memory_free(ThreadTaskArgs, args, 1);
-	_client_thread_callback_impl(state, socket, address, port);
-	return NULL;
+}
+
+
+static
+void destroy_print_module(State* state)
+{
+	if(mutex_platform_print == NULL)
+		return;
+	if(state->is_slave_process)
+		return;
+	pthread_mutex_destroy(mutex_platform_print);
+	munmap(mutex_platform_print, sizeof(pthread_mutex_t));
+	mutex_platform_print = NULL;
+}
+
+
+static
+i32 init_print_module()
+{
+	if(mutex_platform_print != NULL)
+		return 0;
+	mutex_platform_print = mmap(NULL, sizeof(pthread_mutex_t), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	if(mutex_platform_print == MAP_FAILED)
+		return -1;
+	pthread_mutexattr_t attrs;
+	pthread_mutexattr_init(&attrs);
+	pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
+	pthread_mutex_init(mutex_platform_print, &attrs);
+	pthread_mutexattr_destroy(&attrs);
+	return 0;
 }
 
 
@@ -133,12 +183,10 @@ static
 void destroy_state(State* state)
 {
 	// NOTE: DO NOT MODIFY STATE TERMINATION FLAG
+	// NOTE: DO NOT MODIFY SLAVE FLAG
 	
-	// shutdown(state->listen_socket_plain, SHUT_RDWR);
-	// shutdown(state->listen_socket_crypt, SHUT_RDWR);
-	
-	thread_pool_destroy(&state->thread_pool);
-	state->thread_pool = (ThreadPool){};
+	thread_pool_destroy(state->thread_pool);
+	state->thread_pool = NULL;
 	
 	for(u32 i = 0; i < state->slaves_count; ++i)
 	{
@@ -163,9 +211,9 @@ void destroy_state(State* state)
 	state->listen_socket_plain = -1;
 	state->listen_socket_crypt = -1;
 	
-	if(state->documents_root)
-		str0_free(state->documents_root, strlen(state->documents_root));
-	state->documents_root = NULL;
+	if(state->config.documents_root)
+		str0_free(state->config.documents_root, strlen(state->config.documents_root));
+	state->config.documents_root = NULL;
 }
 
 
@@ -211,16 +259,17 @@ i32 handle_connections(State* state)
 				if(client_socket == -1)
 				{
 					if(errno != EAGAIN)
-						PRINT_ERROR("accept() failed: %s %m", errno_as_string(errno));
+						PRINT_ERROR("accept() failed: %s", errno_as_string);
 					continue;
 				}
 				
-				int flags = fcntl(client_socket, F_GETFD);
-				fcntl(client_socket, F_SETFD, flags & ~O_NONBLOCK);
+				// Put socket in blocking mode (should be the default)
+				// int flags = fcntl(client_socket, F_GETFD);
+				// fcntl(client_socket, F_SETFD, flags & ~O_NONBLOCK);
 				
-				PRINT_DEBUG("POLLIN %i", pollfds[i].fd);
+				PRINT_DEBUG("POLLIN %i", (int)pollfds[i].fd);
 				
-				ThreadTask*     task = client_thread_callback;
+				ThreadTask*     task = thread_pool_task;
 				ThreadTaskArgs* args = memory_alloc(ThreadTaskArgs, 1);
 				if(!args)
 				{
@@ -235,9 +284,9 @@ i32 handle_connections(State* state)
 				args->address = sockaddr.sin_addr.s_addr;
 				args->port    = sockaddr.sin_port;
 				
-				if(thread_pool_start_job(&state->thread_pool, task, args) != 0)
+				if(thread_pool_enqueue_task(state->thread_pool, task, args) != 0)
 				{
-					PRINT_ERROR("thread_pool_start_job() failed");
+					PRINT_ERROR("thread_pool_enqueue_task() failed");
 					u8* addr = (u8*)&sockaddr.sin_addr.s_addr;
 					PRINT_ERROR("Dropping connection to %hhu.%hhu.%hhu.%hhu", addr[0], addr[1], addr[2], addr[3]);
 					shutdown(client_socket, SHUT_RDWR);
@@ -255,7 +304,8 @@ i32 handle_connections(State* state)
 static
 i32 init_threads(State* state)
 {
-	if(thread_pool_init(&state->thread_pool, 1+state->extra_threads_count) != 0)
+	*state->thread_pool = (ThreadPool){};
+	if(thread_pool_init(state->thread_pool, 1+state->config.extra_threads_count) != 0)
 		return -1;
 	return 0;	
 }
@@ -264,14 +314,14 @@ i32 init_threads(State* state)
 static
 i32 init_subprocesses(State* state)
 {
-	if(state->extra_processes_count == 0)
+	if(state->config.extra_processes_count == 0)
 		return 0;
 	
-	state->slaves = memory_alloc(pid_t, state->extra_processes_count);
+	state->slaves = memory_alloc(pid_t, state->config.extra_processes_count);
 	if(!state->slaves)
 		return -1;
 	
-	for(u32 i = 0; i < state->extra_processes_count; ++i)
+	for(u32 i = 0; i < state->config.extra_processes_count; ++i)
 	{
 		pid_t pid = fork();
 		if(pid == -1)
@@ -282,7 +332,7 @@ i32 init_subprocesses(State* state)
 				kill(state->slaves[i], SIGTERM);
 				waitpid(state->slaves[i], NULL, 0);
 			}
-			memory_free(pid_t, state->slaves, state->extra_processes_count);
+			memory_free(pid_t, state->slaves, state->config.extra_processes_count);
 			state->slaves       = NULL;
 			state->slaves_count = 0;
 			return -1;
@@ -291,7 +341,7 @@ i32 init_subprocesses(State* state)
 		if(pid == 0)
 		{
 			state->is_slave_process = 1;
-			memory_free(pid_t, state->slaves, state->extra_processes_count);
+			memory_free(pid_t, state->slaves, state->config.extra_processes_count);
 			state->slaves       = NULL;
 			state->slaves_count = 0;
 			// https://stackoverflow.com/questions/284325/how-to-make-child-process-die-after-parent-exits
@@ -403,10 +453,10 @@ i32 init_config(State* state)
 		return -1;
 	}
 	
-	Configuration config = {};
-	config.listen_port_plain = 8080;
-	config.listen_port_crypt = 8081;
-	i32 error = parse_config_string(config_string, config_string_size, &config);
+	state->config.listen_port_plain = 8080;
+	state->config.listen_port_crypt = 8081;
+	
+	i32 error = parse_config_string(config_string, config_string_size, &state->config);
 	memory_free(char, config_string, config_string_size);
 	if(error)
 	{
@@ -414,14 +464,10 @@ i32 init_config(State* state)
 		return -1;
 	}
 	
-	state->listen_port_plain     = config.listen_port_plain;
-	state->listen_port_crypt     = config.listen_port_crypt;
-	state->extra_processes_count = config.extra_processes_count;
-	state->extra_threads_count   = config.extra_threads_count;
-	state->disable_authorization = config.disable_authorization;
-	state->documents_root        = config.documents_root ?: str0_dup0(DOCSDIR);
+	if(!state->config.documents_root)
+		state->config.documents_root = str0_dup0(DOCSDIR);
 	
-	global_log_level = config.log_level;
+	global_log_level = state->config.log_level;
 	
 	return 0;
 }
@@ -430,17 +476,25 @@ i32 init_config(State* state)
 static
 i32 init_state(State* state)
 {
-	state->reload    = 0;
+	state->reload = 0;
 	state->is_slave_process = 0;
 	
-	state->slaves_count = 0;
-	state->slaves       = NULL;
-	state->thread_pool  = (ThreadPool){};
+	state->config = (Configuration) {
+		.listen_port_plain     = 8080,
+		.listen_port_crypt     = 8081,
+		.extra_processes_count = 0,
+		.extra_threads_count   = 0,
+		.disable_authorization = 0,
+		.documents_root        = NULL,
+	};
+	state->users_count = 0;
+	state->users       = NULL;
 	
 	state->listen_socket_plain = -1;
 	state->listen_socket_crypt = -1;
-	state->users_count = 0;
-	state->users       = NULL;
+	state->slaves_count = 0;
+	state->slaves       = NULL;
+	state->thread_pool  = &global_thread_pool;
 	
 	return 0;
 }
@@ -515,13 +569,17 @@ i32 init_daemon()
 
 int main(int argc, char** argv)
 {
-	init_print_module();
-	
-	State*   state = &global_state;
 	CLIArgs* args  = &global_args;
 	if(parse_args(argc, argv, args) != 0)
 	{
 		PRINT_ERROR("argp_parse() failed");
+		return 1;
+	}
+	State* state = &global_state;
+	
+	if(init_print_module() != 0)
+	{
+		PRINT_ERROR("init_print_module() failed");
 		return 1;
 	}
 	
@@ -565,15 +623,15 @@ int main(int argc, char** argv)
 			result = 1;
 		}
 		
-		if(result == 0 && init_listen_socket(&state->listen_socket_plain, state->listen_port_plain) != 0)
+		if(result == 0 && init_listen_socket(&state->listen_socket_plain, state->config.listen_port_plain) != 0)
 		{
-			PRINT_ERROR("init_listen_socket(%hu) failed", state->listen_port_plain);
+			PRINT_ERROR("init_listen_socket(%hu) failed", state->config.listen_port_plain);
 			result = 1;
 		}
 		
-		if(result == 0 && init_listen_socket(&state->listen_socket_crypt, state->listen_port_crypt) != 0)
+		if(result == 0 && init_listen_socket(&state->listen_socket_crypt, state->config.listen_port_crypt) != 0)
 		{
-			PRINT_ERROR("init_listen_socket(%hu) failed", state->listen_port_crypt);
+			PRINT_ERROR("init_listen_socket(%hu) failed", state->config.listen_port_crypt);
 			result = 1;
 		}
 		
@@ -601,7 +659,8 @@ int main(int argc, char** argv)
 	
 	// END SERVER LOOP
 	
-	// free_print_module();
+	closelog();
+	destroy_print_module(state);
 	
 	return result;
 }
