@@ -479,9 +479,7 @@ HTTP_STATUS get_command_result(process_t subproc, filedes_t subproc_stdout, u8**
 	u32 buffer_size = read_avail;
 	u8* buffer = memory_alloc(u8, buffer_size);
 	if(!buffer)
-	{
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
 
 	DWORD read_total = 0;
 	while(read_total < buffer_size)
@@ -507,6 +505,8 @@ HTTP_STATUS get_command_result(process_t subproc, filedes_t subproc_stdout, u8**
 static
 HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len, u8** out_output, u32* out_output_size)
 {
+	// TODO: Check resource type: must be an executable
+	
 	SECURITY_ATTRIBUTES pipes_attrs = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
 	HANDLE pipe_stdou[2];
 	if(!CreatePipe(pipe_stdou, pipe_stdou+1, &pipes_attrs, 0))
@@ -531,13 +531,15 @@ HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len,
 	PROCESS_INFORMATION pi = {0};
 	if(!CreateProcessA(resource_path, NULL, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
 	{
-		PRINT_ERROR("CreateProcessA() failed");
+		PRINT_ERROR("CreateProcessA() failed: GLE = %s", LastErrorAsString);
 		CloseHandle(pipe_stdou[0]);
 		CloseHandle(pipe_stdou[1]);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	CloseHandle(pi.hThread);
 	CloseHandle(pipe_stdou[1]);
+	
+	// TODO: WaitForInputIdle() if we want to add support for command input
 
 	HTTP_STATUS status = get_command_result(pi.hProcess, pipe_stdou[0], out_output, out_output_size);
 	CloseHandle(pipe_stdou[0]);
@@ -547,8 +549,11 @@ HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len,
 
 HTTP_STATUS platform_get_resource(State* state, Str0 resource_path, u32 resource_path_len, u8** out_content, u32* out_content_size)
 {
-	ASSERT(resource_path != NULL);
-	ASSERT(resource_path_len > 0);
+	*out_content      = NULL;
+	*out_content_size = 0;
+	
+	if(!(resource_path && resource_size))
+		return HTTP_STATUS_NOT_FOUND;
 	ASSERT(resource_path[resource_path_len-1] != '/');
 
 	if(str0_beginswith0(resource_path, "/commands"))
