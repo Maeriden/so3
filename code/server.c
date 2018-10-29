@@ -152,8 +152,8 @@ int server_parse_request(u8* buffer, u32 buffer_size, HTTPRequest* out_request)
 {
 	out_request->headers_count = ARRAY_COUNT(out_request->headers);
 	int consumed_size = phr_parse_request(buffer, buffer_size,
-	                                      &out_request->method, &out_request->method_len,
-	                                      &out_request->path,   &out_request->path_len,
+	                                      (const char**)&out_request->method, &out_request->method_len,
+	                                      (const char**)&out_request->path,   &out_request->path_len,
 	                                      &out_request->minor_version,
 	                                      out_request->headers, &out_request->headers_count,
 	                                      0);
