@@ -2,15 +2,17 @@
 #include "platform.h"
 
 
-Str0 _strN_dup0(const char* str, u32 len, const char* __file__, int __line__)
+char* _strN_dupN(const char* str, u32 len, const char* __file__, int __line__)
 {
-	Str0 dup = _memory_alloc(len+1, __file__, __line__);
+	Str0 dup = _memory_alloc(len, __file__, __line__);
 	if(dup)
 		memcpy(dup, str, len);
 	return dup;
 }
-#define strN_dup0(str, len) _strN_dup0(str, len, __FILE__, __LINE__)
-#define str0_dup0(str)       strN_dup0(str, strlen(str))
+#define strN_dupN(str, len) _strN_dupN(str, len,           __FILE__, __LINE__)
+#define strN_dup0(str, len) _strN_dupN(str, len+1,         __FILE__, __LINE__)
+#define str0_dupN(str)      _strN_dupN(str, strlen(str),   __FILE__, __LINE__)
+#define str0_dup0(str)      _strN_dupN(str, strlen(str)+1, __FILE__, __LINE__)
 
 
 char* _strN_catN(const char* prefix, u32 prefix_len, const char* suffix, u32 suffix_len, const char* __file__, int __line__)
@@ -33,6 +35,7 @@ u32 strN_indexofN(const char* haystack, u32 haystack_len, const char* needle, u3
 {
 	if(haystack_len < needle_len)
 		return haystack_len;
+	
 	u32 last_chance = haystack_len-needle_len;
 	for(u32 h = 0; h <= last_chance; ++h)
 		if(strncmp(haystack+h, needle, needle_len) == 0)
@@ -44,7 +47,18 @@ u32 strN_indexofN(const char* haystack, u32 haystack_len, const char* needle, u3
 #define str0_indexof0(haystack,               needle)             strN_indexofN(haystack, strlen(haystack), needle, strlen(needle))
 
 
-b32 strN_beginswithN(const_Str0 string, u32 string_len, const_Str0 prefix, u32 prefix_len)
+b32 strN_containsN(const char* haystack, u32 haystack_len, const char* needle, u32 needle_len)
+{
+	if(haystack_len < needle_len)
+		return 0;
+	return strN_indexofN(haystack, haystack_len, needle, needle_len) != haystack_len;
+}
+#define strN_contains0(haystack, haystack_len, needle)             strN_containsN(haystack, haystack_len,     needle, strlen(needle))
+#define str0_containsN(haystack,               needle, needle_len) strN_containsN(haystack, strlen(haystack), needle, needle_len)
+#define str0_contains0(haystack,               needle)             strN_containsN(haystack, strlen(haystack), needle, strlen(needle))
+
+
+b32 strN_beginswithN(const char* string, u32 string_len, const char* prefix, u32 prefix_len)
 {
 	if(string_len < prefix_len)
 		return 0;
@@ -60,7 +74,7 @@ u32 strN_findlineN(const char* string, u32 string_len, const char** out_line, u3
 	*out_line     = NULL;
 	*out_line_len = 0;
 
-	if(string == NULL || string_len == 0)
+	if(!(string && string_len))
 		return 0;
 
 	u32         line_len = string_len;
@@ -79,9 +93,8 @@ u32 strN_findlineN(const char* string, u32 string_len, const char** out_line, u3
 	u32 advance_count = (line_len == string_len) ? string_len : line_len+1;
 
 	// NOTE: Fuck you windows
-	if(line_len > 0)
-		if(line[line_len-1] == '\r')
-			line_len -= 1;
+	if(line_len > 0 && line[line_len-1] == '\r')
+		line_len -= 1;
 
 	*out_line     = line;
 	*out_line_len = line_len;
@@ -158,8 +171,8 @@ i32 parse_users_string(char* users_string, u32  users_string_len, Str0** out_use
 	u32 users_count = 0;
 	while(users_string_len > 0)
 	{
-		u32   line_len = 0;
-		char* line     = NULL;
+		u32         line_len = 0;
+		const char* line     = NULL;
 		u32 advance_count = strN_findlineN(users_string, users_string_len, &line, &line_len);
 		ASSERT(advance_count > 0);
 		// if(advance_count == 0)
@@ -184,8 +197,8 @@ i32 parse_users_string(char* users_string, u32  users_string_len, Str0** out_use
 	u32 user_i = 0;
 	while(user_i < users_count)
 	{
-		u32   line_len = 0;
-		char* line     = NULL;
+		u32         line_len = 0;
+		const char* line     = NULL;
 		u32 advance_count = strN_findlineN(users_string, users_string_len, &line, &line_len);
 		ASSERT(advance_count > 0);
 		// if(advance_count == 0)
