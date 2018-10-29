@@ -95,22 +95,6 @@ State global_state = {
 ThreadPool global_thread_pool = {0};
 
 
-static
-void thread_pool_task_impl(State* state, socket_t client_socket, u32 address, u16 port)
-{
-	u32 encryption_key = 0;
-	if(port == state->config.listen_port_crypt)
-	{
-		srand(address);
-		encryption_key = rand();
-	}
-
-	server_serve_client(state, client_socket, encryption_key, (u8*)&address);
-	shutdown(client_socket, SOCKET_SHUTDOWN_RW);
-	closesocket(client_socket);
-}
-
-
 typedef struct ThreadTaskArgs
 {
 	State*   state;
@@ -123,56 +107,22 @@ static
 void thread_pool_task(void* param)
 {
 	ThreadTaskArgs* args = param;
-	State*   state   = args->state;
-	socket_t socket  = args->socket;
-	u32      address = args->address;
-	u16      port    = args->port;
-	memory_free(ThreadTaskArgs, args, 1);
-	thread_pool_task_impl(state, socket, address, port);
-}
-
-
-static
-DWORD WINAPI thread_pool_callback(LPVOID param)
-{
-	ThreadPool* pool = param;
-	while(1)
+	State* state   = args->state;
+	int    socket  = args->socket;
+	u32    address = args->address;
+	u16    port    = args->port;
+	
+	u32 encryption_key = 0;
+	if(port == state->config.listen_port_crypt)
 	{
-		ThreadJob* job = NULL;
-
-		platform_critsec_enter(&pool->queue_critsec);
-		{
-			while(pool->alive && !pool->queue_head)
-			{
-				if(platform_condvar_wait(&pool->queue_condvar, &pool->queue_critsec) != 0)
-				{
-					PRINT_ERROR("platform_condvar_wait() failed");
-					platform_critsec_leave(&pool->queue_critsec);
-					return 1;
-				}
-			}
-
-			if(!pool->alive)
-				break;
-			ASSERT(pool->queue_head);
-
-			// Dequeue job
-			job = pool->queue_head;
-			pool->queue_head = pool->queue_head->next;
-			pool->queue_len -= 1;
-
-		}
-		platform_critsec_leave(&pool->queue_critsec);
-
-		if(job)
-		{
-			job->task(job->args);
-			memory_free(ThreadJob, job, 1);
-		}
+		srand(address);
+		encryption_key = rand();
 	}
-
-	platform_critsec_leave(&pool->queue_critsec);
-	return 0;
+	server_serve_client(state, socket, encryption_key, (u8*)&address);
+	shutdown(socket, SOCKET_SHUTDOWN_RW);
+	closesocket(socket);
+	
+	memory_free(ThreadTaskArgs, args, 1);
 }
 
 
