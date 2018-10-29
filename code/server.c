@@ -27,12 +27,15 @@ static
 const_Str0 http_reason(u32 status_code)
 {
 	switch(status_code) {
+		case 100: return "Continue";
 		case 200: return "OK";
 		case 201: return "Created";
 		case 400: return "Bad Request";
 		case 401: return "Unauthorized";
+		case 403: return "Forbidden";
 		case 404: return "Not Found";
 		case 405: return "Method Not Allowed";
+		case 417: return "Expectation Failed";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
 	} return "";
@@ -180,12 +183,19 @@ static
 HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* request, u8** out_response, u32* out_response_size,
 	                              u32* out_syslog_resource_size)
 {
+	*out_response      = NULL;
+	*out_response_size = 0;
+	
 	if(request->path_len < 1)
 		return HTTP_STATUS_BAD_REQUEST;
-	
 	ASSERT(request->method != NULL);
 	ASSERT(request->path != NULL);
 	
+	struct phr_header* xpct_header = server_find_header(request->headers, request->headers_count, "Expect");
+	if(xpct_header)
+	{
+		return HTTP_STATUS_EXPECTATION_FAILED;
+	}
 	
 	size_t auth_string_len = 0;
 	u8*    auth_string     = NULL;
@@ -268,6 +278,8 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 	if(!buffer)
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	
+	HTTP_STATUS http_status = 200;
+	
 	b32 recv_remain_found = 0;
 	u32 recv_remain       = 0;
 	u32 recv_total        = 0;
@@ -313,6 +325,13 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 					return HTTP_STATUS_BAD_REQUEST;
 				}
 				
+				struct phr_header* xpct_header = server_find_header(request.headers, request.headers_count, "Expect");
+				if(xpct_header)
+				{
+					http_status = HTTP_STATUS_EXPECTATION_FAILED;
+					break;
+				}
+				
 				struct phr_header* clen_header = server_find_header(request.headers, request.headers_count, "Content-Length");
 				if(clen_header)
 				{
@@ -324,7 +343,7 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 					u32 content_len = strtoul(clen_header->value, NULL, 10);
 					u32 content_not_yet_received_len = content_len - content_already_received_len;
 					
-					recv_remain       = content_not_yet_received_len;
+					recv_remain = content_not_yet_received_len;
 					
 					// TODO: Perform a final allocation now that the message size is known?
 				}
@@ -366,7 +385,7 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 	
 	*out_buffer      = buffer;
 	*out_buffer_size = buffer_size;
-	return HTTP_STATUS_OK;
+	return http_status;
 }
 
 
@@ -381,6 +400,7 @@ void server_serve_client(State* state, socket_t socket, u32 encryption_key, u8 a
 	HTTPRequest request = {0};
 	HTTP_STATUS http_status = server_recv_request(socket, &request_buffer, &request_buffer_size, &request);
 	
+	b32 do_syslog = 1;
 	u32 syslog_resource_size = 0;
 	if(HTTP_STATUS_IS_SUCCESS(http_status))
 	{
@@ -395,13 +415,19 @@ void server_serve_client(State* state, socket_t socket, u32 encryption_key, u8 a
 		}
 	}
 	
+	
 	if(server_send_response(socket, http_status, response_buffer, response_buffer_size) == 0)
 	{
-		Str0 userid = server_extract_userid(&request);
-		if(platform_syslog(address, userid, request.method, request.path, request.minor_version, http_status, syslog_resource_size) != 0)
-			PRINT_ERROR("platform_syslog() failed");
-		if(userid)
-			memory_free(char, userid, strlen(userid));
+		if(do_syslog)
+		{
+			Str0 userid = server_extract_userid(&request);
+			if(platform_syslog(address, userid, request.method, request.path, request.minor_version, http_status, syslog_resource_size) != 0)
+			{
+				PRINT_ERROR("platform_syslog() failed");
+			}
+			if(userid)
+				memory_free(char, userid, strlen(userid));
+		}
 	}
 	else
 	{
