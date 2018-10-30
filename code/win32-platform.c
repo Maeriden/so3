@@ -15,8 +15,8 @@ void* platform_memory_alloc(size_t size)
 
 i32 platform_memory_free(void* addr, size_t size)
 {
-	if(!(addr && size)) return;
 	free(addr);
+	return 0;
 }
 
 

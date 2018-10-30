@@ -4,15 +4,28 @@
 
 char* _strN_dupN(const char* str, u32 len, const char* __file__, int __line__)
 {
-	Str0 dup = _memory_alloc(len, __file__, __line__);
+	if(!(str && len))
+		return NULL;
+	char* dup = _memory_alloc(len, __file__, __line__);
 	if(dup)
 		memcpy(dup, str, len);
 	return dup;
 }
-#define strN_dupN(str, len) _strN_dupN(str, len,           __FILE__, __LINE__)
-#define strN_dup0(str, len) _strN_dupN(str, len+1,         __FILE__, __LINE__)
-#define str0_dupN(str)      _strN_dupN(str, strlen(str),   __FILE__, __LINE__)
-#define str0_dup0(str)      _strN_dupN(str, strlen(str)+1, __FILE__, __LINE__)
+#define strN_dupN(str, len) _strN_dupN(str, len,         __FILE__, __LINE__)
+#define str0_dupN(str)      _strN_dupN(str, strlen(str), __FILE__, __LINE__)
+
+
+Str0 _strN_dup0(const char* str, u32 len, const char* __file__, int __line__)
+{
+	if(!(str && len))
+		return NULL;
+	Str0 dup = _memory_alloc(len+1, __file__, __line__);
+	if(dup)
+		memcpy(dup, str, len), dup[len] = 0;
+	return dup;
+}
+#define strN_dup0(str, len) _strN_dup0(str, len,         __FILE__, __LINE__)
+#define str0_dup0(str)      _strN_dup0(str, strlen(str), __FILE__, __LINE__)
 
 
 char* _strN_catN(const char* prefix, u32 prefix_len, const char* suffix, u32 suffix_len, const char* __file__, int __line__)
@@ -26,8 +39,8 @@ char* _strN_catN(const char* prefix, u32 prefix_len, const char* suffix, u32 suf
 	return result;
 }
 #define strN_catN(prefix, prefix_len, suffix, suffix_len) _strN_catN(prefix, prefix_len,     suffix, suffix_len,       __FILE__, __LINE__)
-#define strN_cat0(prefix, prefix_len, suffix)             _strN_catN(prefix, prefix_len,     suffix, strlen(suffix)+1, __FILE__, __LINE__)
 #define str0_catN(prefix,             suffix, suffix_len) _strN_catN(prefix, strlen(prefix), suffix, suffix_len,       __FILE__, __LINE__)
+#define strN_cat0(prefix, prefix_len, suffix)             _strN_catN(prefix, prefix_len,     suffix, strlen(suffix)+1, __FILE__, __LINE__)
 #define str0_cat0(prefix,             suffix)             _strN_catN(prefix, strlen(prefix), suffix, strlen(suffix)+1, __FILE__, __LINE__)
 
 
@@ -42,8 +55,8 @@ u32 strN_indexofN(const char* haystack, u32 haystack_len, const char* needle, u3
 			return h;
 	return haystack_len;
 }
-#define strN_indexof0(haystack, haystack_len, needle)             strN_indexofN(haystack, haystack_len,     needle, strlen(needle))
 #define str0_indexofN(haystack,               needle, needle_len) strN_indexofN(haystack, strlen(haystack), needle, needle_len)
+#define strN_indexof0(haystack, haystack_len, needle)             strN_indexofN(haystack, haystack_len,     needle, strlen(needle))
 #define str0_indexof0(haystack,               needle)             strN_indexofN(haystack, strlen(haystack), needle, strlen(needle))
 
 
@@ -53,8 +66,8 @@ b32 strN_containsN(const char* haystack, u32 haystack_len, const char* needle, u
 		return 0;
 	return strN_indexofN(haystack, haystack_len, needle, needle_len) != haystack_len;
 }
-#define strN_contains0(haystack, haystack_len, needle)             strN_containsN(haystack, haystack_len,     needle, strlen(needle))
 #define str0_containsN(haystack,               needle, needle_len) strN_containsN(haystack, strlen(haystack), needle, needle_len)
+#define strN_contains0(haystack, haystack_len, needle)             strN_containsN(haystack, haystack_len,     needle, strlen(needle))
 #define str0_contains0(haystack,               needle)             strN_containsN(haystack, strlen(haystack), needle, strlen(needle))
 
 
@@ -64,8 +77,8 @@ b32 strN_beginswithN(const char* string, u32 string_len, const char* prefix, u32
 		return 0;
 	return strN_indexofN(string, prefix_len, prefix, prefix_len) == 0;
 }
-#define strN_beginswith0(string, string_len, prefix)             strN_beginswithN(string, string_len,     prefix, strlen(prefix))
 #define str0_beginswithN(string,             prefix, prefix_len) strN_beginswithN(string, strlen(string), prefix, prefix_len)
+#define strN_beginswith0(string, string_len, prefix)             strN_beginswithN(string, string_len,     prefix, strlen(prefix))
 #define str0_beginswith0(string,             prefix)             strN_beginswithN(string, strlen(string), prefix, strlen(prefix))
 
 
