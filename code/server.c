@@ -197,24 +197,31 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 		return HTTP_STATUS_EXPECTATION_FAILED;
 	}
 	
-	size_t auth_string_len = 0;
-	u8*    auth_string     = NULL;
-	struct phr_header* auth_header = server_find_header(request->headers, request->headers_count, "Authorization");
-	if(auth_header)
+	if(!state->config.disable_authorization)
 	{
-		u32 offset = strlen("Basic ");
-		auth_string = base64_decode(auth_header->value+offset, auth_header->value_len-offset, &auth_string_len);
-		if(!auth_string)
+		size_t auth_string_len = 0;
+		u8*    auth_string     = NULL;
+		struct phr_header* auth_header = server_find_header(request->headers, request->headers_count, "Authorization");
+		if(auth_header)
 		{
-			PRINT_ERROR("base64_decode() failed");
-			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+			u32 offset = strlen("Basic ");
+			auth_string = base64_decode(auth_header->value+offset, auth_header->value_len-offset, &auth_string_len);
+			if(!auth_string)
+			{
+				PRINT_ERROR("base64_decode() failed");
+				return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+			}
 		}
-	}
+		else
+		{
+			return HTTP_STATUS_UNAUTHORIZED;
+		}
 	
-	b32 authorized = server_check_authorization(state, auth_string, auth_string_len);
-	free(auth_string);
-	if(!authorized)
-		return HTTP_STATUS_UNAUTHORIZED;
+		b32 authorized = server_check_authorization(state, auth_string, auth_string_len);
+		free(auth_string);
+		if(!authorized)
+			return HTTP_STATUS_FORBIDDEN;
+	}
 	
 	
 	if(strN_beginswith0(request->method, request->method_len, "PUT"))
@@ -224,13 +231,13 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 		if(request->path[request->path_len-1] == '/')
 		{
 			// Forbid PUTing using a path that looks like a directory
-			return HTTP_STATUS_BAD_REQUEST;
+			return HTTP_STATUS_FORBIDDEN;
 		}
 		
 		if(str0_beginswith0(request->path, "/commands"))
 		{
 			// Forbid PUTing to commands directory
-			return HTTP_STATUS_UNAUTHORIZED;
+			return HTTP_STATUS_FORBIDDEN;
 		}
 		
 		HTTP_STATUS http_status = platform_put_resource(state, request->path, request->path_len, request->content, request->content_len);
