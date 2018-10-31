@@ -28,16 +28,15 @@ fi
 optimization_level="d"
 
 cflags="/nologo /MDd /EHsc /Iinclude /O${optimization_level}"
-dflags="/Zi /DENABLE_ASSERT=1 /DENABLE_DEBUG=1 /DPLATFORM_WIN32=1"
+dflags="/Zi /DENABLE_ASSERT=1 /DENABLE_DEBUG=1"
+define="/DPLATFORM_WIN32=1"
 lflags="/nologo /subsystem:console /incremental:no /opt:ref"
 
 
 echo "[$(date +%T)] Compiling main"
-cl.exe /c "code\\win32-main.c" /Fo"obj\\" /Fd"bin\\win32-main.pdb" ${cflags} ${dflags}
+cl.exe /c "code\\win32-main.c" /Fo"obj\\" /Fd"bin\\win32-main.pdb" ${cflags} ${dflags} ${define}
 [ $? -eq 0 ] || exit 1
 
 echo "[$(date +%T)] Linking main"
 link.exe "obj\\win32-main.obj" /out:"bin\\server.exe" /debug /pdb:"bin\\win32-main.pdb" ${lflags}
 [ $? -eq 0 ] || exit 1
-
-echo "Success"

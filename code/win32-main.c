@@ -148,10 +148,8 @@ void destroy_state(State* state)
 {
 	// NOTE: DO NOT MODIFY STATE TERMINATION FLAG
 
-	// shutdown(state->listen_socket_plain, SHUT_RDWR);
-	// shutdown(state->listen_socket_crypt, SHUT_RDWR);
-
-	thread_pool_destroy(state->thread_pool);
+	if(state->thread_pool)
+		thread_pool_destroy(state->thread_pool);
 	state->thread_pool = NULL;
 
 	for(u32 i = 0; i < state->slaves_count; ++i)
@@ -175,6 +173,7 @@ void destroy_state(State* state)
 		closesocket(state->listen_socket_plain);
 	if(state->listen_socket_crypt != INVALID_SOCKET)
 		closesocket(state->listen_socket_crypt);
+
 	state->listen_socket_plain = INVALID_SOCKET;
 	state->listen_socket_crypt = INVALID_SOCKET;
 
@@ -263,11 +262,12 @@ i32 handle_connections(State* state)
 
 
 static
-i32 init_threads(State* state)
+i32 init_threads(State* state, ThreadPool* thread_pool)
 {
-	*state->thread_pool = (ThreadPool){0};
-	if(thread_pool_init(state->thread_pool, 1+state->config.extra_threads_count) != 0)
+	*thread_pool = (ThreadPool){0};
+	if(thread_pool_init(thread_pool, 1+state->config.extra_threads_count) != 0)
 		return -1;
+	state->thread_pool = thread_pool;
 	return 0;	
 }
 
@@ -360,7 +360,7 @@ i32 init_listen_socket(State* state, socket_t* out_socket, u16 port)
 	if(state->is_slave_process)
 	{
 		DWORD read_count;
-		ReadFile(STDIN_FILENO, out_socket, sizeof(socket_t), &read_count, NULL);
+		ReadFile(GetStdHandle(0), out_socket, sizeof(socket_t), &read_count, NULL);
 		return 0;
 	}
 
@@ -535,8 +535,10 @@ BOOL WINAPI console_ctrl_handler(DWORD dwCtrlType)
 	} break;
 	}
 
-	shutdown(state->listen_socket_plain, SOCKET_SHUTDOWN_RW);
-	shutdown(state->listen_socket_crypt, SOCKET_SHUTDOWN_RW);
+	if(state->listen_socket_plain != INVALID_SOCKET)
+		shutdown(state->listen_socket_plain, SOCKET_SHUTDOWN_RW);
+	if(state->listen_socket_crypt != INVALID_SOCKET)
+		shutdown(state->listen_socket_crypt, SOCKET_SHUTDOWN_RW);
 	return TRUE;
 }
 
@@ -550,9 +552,9 @@ i32 init_syslog(b32 is_slave_process, HANDLE* out_log_handle)
 	if(is_slave_process)
 	{
 		DWORD read_count;
-		if(!ReadFile(STDIN_FILENO, &log_handle, sizeof(log_handle), &read_count, NULL))
+		if(!ReadFile(GetStdHandle(0), &log_handle, sizeof(log_handle), &read_count, NULL))
 		{
-			PRINT_ERROR("ReadFile(STDIN_FILENO) failed");
+			PRINT_ERROR("ReadFile(GetStdHandle(0)) failed");
 			return -1;
 		}
 	}
@@ -672,7 +674,7 @@ int main(int argc, char** argv)
 			result = 1;
 		}
 		
-		if(result == 0 && init_threads(state) != 0)
+		if(result == 0 && init_threads(state, &global_thread_pool) != 0)
 		{
 			PRINT_ERROR("init_threads() failed");
 			result = 1;

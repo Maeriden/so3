@@ -2,6 +2,16 @@
 #include <assert.h>
 #include <stdlib.h>
 
+	
+struct dirent
+{
+	u32  d_attr;
+	char d_name[1];
+};
+
+typedef int scandir_select_t(const struct dirent*);
+typedef int scandir_compar_t(const struct dirent**, const struct dirent**);
+
 
 const_Str0 _errno_as_string(int err)
 {

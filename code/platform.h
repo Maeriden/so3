@@ -79,19 +79,6 @@ typedef const char* const_Str0;
 	#define PRINT_ERROR_FL(F, L, ...) platform_print(F, L, 1, "[EE] ", __VA_ARGS__)
 	#define PRINT_WARN_FL(F, L, ...)  platform_print(F, L, 2, "[WW] ", __VA_ARGS__)
 	#define PRINT_DEBUG_FL(F, L, ...) platform_print(F, L, 3, "[DD] ", __VA_ARGS__)
-	
-	#define STDIN_FILENO  GetStdHandle(0)
-	#define STDOUT_FILENO GetStdHandle(1)
-	#define STDERR_FILENO GetStdHandle(2)
-	
-	typedef struct dirent
-	{
-		u32  d_attr;
-		char d_name[1];
-	} Dirent;
-	
-	typedef int scandir_select_t(const struct dirent*);
-	typedef int scandir_compar_t(const struct dirent**, const struct dirent**);
 #endif
 
 

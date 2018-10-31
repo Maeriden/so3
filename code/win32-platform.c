@@ -281,7 +281,6 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 	ASSERT(resource_path[resource_path_len-1] != '/');
 	ASSERT(str0_beginswith0(resource_path, "/commands") == FALSE);
 
-
 	Str0 full_path = str0_cat0(state->config.documents_root, resource_path);
 	if(!full_path)
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
@@ -296,10 +295,16 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 			return HTTP_STATUS_METHOD_NOT_ALLOWED;
 		}
 	}
-	else if(GetLastError() != ERROR_FILE_NOT_FOUND)
+	else switch(GetLastError())
 	{
-		PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+		case ERROR_FILE_NOT_FOUND:
+		case ERROR_PATH_NOT_FOUND:
+		case ERROR_INVALID_NAME:
+			break;
+
+		default:
+			PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
+			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
 	if(create_resource_path(full_path, full_path_len) != 0)
@@ -315,6 +320,7 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
+	// There can be no content; PUTing an empty file is a valid operation
 	if(content && content_size)
 	{
 		if(!LockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh) != 0)

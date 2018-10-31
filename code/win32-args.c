@@ -4,7 +4,7 @@
 
 typedef struct CLIArgs
 {
-	b32 daemonize;
+	//b32 daemonize;
 	b32 is_slave;
 } CLIArgs;
 
@@ -16,7 +16,7 @@ i32 parse_args(int argc, char** argv, CLIArgs* args)
 	struct arg_end* end;
 
 	void* argtable[] = {
-		daemonize = arg_lit0(NULL, "daemonize", "Daemonize on start"),
+		//daemonize = arg_lit0(NULL, "daemonize", "Daemonize on start"),
 		is_slave  = arg_lit0(NULL, "slave",     "Internal flag"),
 		end       = arg_end(20),
 	};
@@ -29,7 +29,7 @@ i32 parse_args(int argc, char** argv, CLIArgs* args)
 		return -1;
 	}
 
-	args->daemonize = daemonize->count > 0;
+	//args->daemonize = daemonize->count > 0;
 	args->is_slave  = is_slave->count > 0;
 
 	arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
