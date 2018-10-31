@@ -243,109 +243,6 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 }
 
 
-// i32 platform_recv(int socket, u8** out_data, u32* out_data_size)
-// {
-// 	u32 buffer_size = 4096;
-// 	u8* buffer      = memory_alloc(u8, buffer_size);
-// 	if(!buffer)
-// 		return -1;
-	
-// 	ssize_t bytes_received_total = 0;
-// 	while(1)
-// 	{
-// 		void*  available_buffer      = buffer      + bytes_received_total;
-// 		size_t available_buffer_size = buffer_size - bytes_received_total;
-		
-// 		ssize_t bytes_received_count = read(socket, available_buffer, available_buffer_size);
-// 		if(bytes_received_count == -1)
-// 		{
-// 			if(errno == EINTR)
-// 				continue;
-// 			PRINT_ERROR("read() failed");
-// 			memory_free(u8, buffer, buffer_size);
-// 			return RESULT_SERVER_ERROR;
-// 		}
-		
-// 		if(bytes_received_count == 0)
-// 			break; // End-of-File (socket shutdown)
-		
-// 		if(bytes_received_total + bytes_received_count < 0)
-// 		{
-// 			PRINT_ERROR("exceeded maximum message size");
-// 			memory_free(u8, buffer, buffer_size);
-// 			return RESULT_SERVER_ERROR;
-// 		}
-		
-// 		bytes_received_total += bytes_received_count;
-		
-// 		// ASSERT(bytes_received_total <= buffer_size);
-// 		if(bytes_received_total == buffer_size)
-// 		{
-// 			u32   new_buffer_size = buffer_size + 4096;
-// 			void* new_buffer      = memory_realloc(u8, buffer, buffer_size, new_buffer_size);
-// 			if(!new_buffer)
-// 			{
-// 				memory_free(u8, buffer, buffer_size);
-// 				return RESULT_SERVER_ERROR;
-// 			}
-// 			buffer      = new_buffer;
-// 			buffer_size = new_buffer_size;
-// 		}
-// 	}
-	
-// 	if(bytes_received_total == 0)
-// 	{
-// 		memory_free(u8, buffer, buffer_size);
-// 		buffer      = NULL;
-// 		buffer_size = 0;
-// 		return RESULT_CLIENT_ERROR;
-// 	}
-	
-// 	if(bytes_received_total < buffer_size)
-// 	{
-// 		// Shrink result to exact request length
-// 		u32 final_buffer_size = bytes_received_total;
-// 		u8* final_buffer      = memory_realloc(u8, buffer, buffer_size, final_buffer_size);
-// 		if(!final_buffer)
-// 		{
-// 			memory_free(u8, buffer, buffer_size);
-// 			return RESULT_SERVER_ERROR;
-// 		}
-// 		buffer      = final_buffer;
-// 		buffer_size = final_buffer_size;
-// 	}
-	
-// 	*out_data      = buffer;
-// 	*out_data_size = buffer_size;
-// 	return RESULT_SUCCESS;
-// }
-
-// i32 platform_send(int socket, u8* data, u32 data_size)
-// {
-// 	if(!(data && data_size))
-// 		return 0;
-	
-// 	ssize_t bytes_sent_total = 0;
-// 	while(bytes_sent_total < data_size)
-// 	{
-// 		void*  remaining_data      = data      + bytes_sent_total;
-// 		size_t remaining_data_size = data_size - bytes_sent_total;
-		
-// 		ssize_t bytes_sent_count = write(socket, remaining_data, remaining_data_size);
-// 		if(bytes_sent_count == -1)
-// 		{
-// 			if(errno == EINTR)
-// 				continue;
-// 			PRINT_ERROR("write() failed");
-// 			return RESULT_SERVER_ERROR;
-// 		}
-// 		ASSERT(bytes_sent_count > 0);
-// 		bytes_sent_total += bytes_sent_count;
-// 	}
-// 	return 0;
-// }
-
-
 
 ////////////////////////////////////////////////////////////
 // PLATFORM FUNCTIONS: PUT RESOURCE                       //
@@ -433,7 +330,8 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 		PRINT_ERROR("open(%s/%s) failed", state->config.documents_root, resource_path);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
-	
+
+	// There can be no content; PUTing an empty file is a valid operation
 	if(content && content_size)
 	{
 		if(fshlock_nointr(resource_fd) != 0)
