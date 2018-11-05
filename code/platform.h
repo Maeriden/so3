@@ -22,6 +22,7 @@ typedef const char* const_Str0;
 #define until(expr) while(!(expr))
 #define ARRAY_COUNT(a) ( sizeof(a) / sizeof(*a) )
 #define MIN(a, b)      ( (a) < (b) ? (a) : (b) )
+#define LOG_LEVEL_MAX 3
 
 
 
@@ -80,20 +81,6 @@ typedef const char* const_Str0;
 	#define PRINT_WARN_FL(F, L, ...)  platform_print(F, L, 2, "[WW] ", __VA_ARGS__)
 	#define PRINT_DEBUG_FL(F, L, ...) platform_print(F, L, 3, "[DD] ", __VA_ARGS__)
 #endif
-
-
-
-
-#if ENABLE_ASSERT
-	#include <assert.h>
-	#define ASSERT(c) assert(c)
-#else
-	#define ASSERT(c) do{ (void)sizeof(c); }while(0)
-#endif
-
-#define PRINT_ERROR(...) PRINT_ERROR_FL(__FILE__, __LINE__, __VA_ARGS__)
-#define PRINT_WARN(...)  PRINT_WARN_FL (__FILE__, __LINE__, __VA_ARGS__)
-#define PRINT_DEBUG(...) PRINT_DEBUG_FL(__FILE__, __LINE__, __VA_ARGS__)
 
 
 

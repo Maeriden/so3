@@ -1,6 +1,19 @@
 #include <string.h>
 #include "platform.h"
 
+#if ENABLE_ASSERT
+	#include <assert.h>
+	#define ASSERT(c) assert(c)
+#else
+	#define ASSERT(c) do{ (void)sizeof(c); }while(0)
+#endif
+
+#define PRINT_ERROR(...) PRINT_ERROR_FL(__FILE__, __LINE__, __VA_ARGS__)
+#define PRINT_WARN(...)  PRINT_WARN_FL (__FILE__, __LINE__, __VA_ARGS__)
+#define PRINT_DEBUG(...) PRINT_DEBUG_FL(__FILE__, __LINE__, __VA_ARGS__)
+
+
+
 
 char* _strN_dupN(const char* str, u32 len, const char* __file__, int __line__)
 {
