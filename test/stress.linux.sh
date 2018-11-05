@@ -50,10 +50,9 @@ fi
 datedir="$(date)"
 datedir="${datedir// /_}"
 datedir="${datedir//:/_}"
-logpath="./${datedir}"
+logpath="$(mktemp --directory --tmpdir "${datedir}.XXX")"
 request_count=${2:-0}
 
-mkdir "${logpath}"
 case "${1}" in
 	
 "GET")
