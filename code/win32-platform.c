@@ -25,12 +25,13 @@ i32 platform_memory_free(void* addr, size_t size)
 // PLATFORM FUNCTIONS: PRINTING                           //
 ////////////////////////////////////////////////////////////
 
-u32 global_log_level = 0;
+// u32 global_log_level = 0xFFFFFFFF;
 static mutex_t mutex_platform_print = NULL;
 
 void platform_print(const_Str0 file, int line, u32 level, const_Str0 prefix, const_Str0 format, ...)
 {
-	if(level > global_log_level)
+	State* state = &global_state;
+	if(level > state->config.log_level)
 		return;
 	if(mutex_platform_print == NULL || WaitForSingleObject(mutex_platform_print, INFINITE) == WAIT_OBJECT_0)
 	{

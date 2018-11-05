@@ -58,6 +58,7 @@ State global_state = {
 		.extra_threads_count   = 0,
 		.disable_authorization = 0,
 		.documents_root        = NULL,
+		.log_level             = LOG_LEVEL_MAX,
 	},
 	.users_count = 0,
 	.users       = NULL,
@@ -454,9 +455,6 @@ i32 init_config(State* state)
 		return -1;
 	}
 
-	state->config.listen_port_plain = 8080;
-	state->config.listen_port_crypt = 8081;
-
 	i32 error = parse_config_string(config_string, config_string_size, &state->config);
 	memory_free(char, config_string, config_string_size);
 	if(error)
@@ -468,7 +466,7 @@ i32 init_config(State* state)
 	if(!state->config.documents_root)
 		state->config.documents_root = str0_dup0(DOCSDIR);
 
-	global_log_level = state->config.log_level;
+	// global_log_level = state->config.log_level;
 
 	return 0;
 }
@@ -487,6 +485,7 @@ i32 init_state(State* state, b32 is_slave)
 		.extra_threads_count   = 0,
 		.disable_authorization = 0,
 		.documents_root        = NULL,
+		.log_level             = LOG_LEVEL_MAX,
 	};
 	state->users_count = 0;
 	state->users       = NULL;

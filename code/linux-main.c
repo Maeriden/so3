@@ -73,7 +73,7 @@ State global_state = {
 		.extra_threads_count   = 0,
 		.disable_authorization = 0,
 		.documents_root        = NULL,
-		.log_level             = 3,
+		.log_level             = LOG_LEVEL_MAX,
 	},
 	.users_count = 0,
 	.users       = NULL,
@@ -143,30 +143,13 @@ void thread_pool_task(void* param)
 static
 void destroy_print_module(State* state)
 {
-	if(mutex_platform_print == NULL)
-		return;
 	if(state->is_slave_process)
+		return;
+	if(mutex_platform_print == NULL)
 		return;
 	pthread_mutex_destroy(mutex_platform_print);
 	munmap(mutex_platform_print, sizeof(pthread_mutex_t));
 	mutex_platform_print = NULL;
-}
-
-
-static
-i32 init_print_module()
-{
-	if(mutex_platform_print != NULL)
-		return 0;
-	mutex_platform_print = mmap(NULL, sizeof(pthread_mutex_t), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-	if(mutex_platform_print == MAP_FAILED)
-		return -1;
-	pthread_mutexattr_t attrs;
-	pthread_mutexattr_init(&attrs);
-	pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED);
-	pthread_mutex_init(mutex_platform_print, &attrs);
-	pthread_mutexattr_destroy(&attrs);
-	return 0;
 }
 
 
@@ -453,9 +436,6 @@ i32 init_config(State* state)
 		return -1;
 	}
 	
-	state->config.listen_port_plain = 8080;
-	state->config.listen_port_crypt = 8081;
-	
 	i32 error = parse_config_string(config_string, config_string_size, &state->config);
 	memory_free(char, config_string, config_string_size);
 	if(error)
@@ -467,7 +447,7 @@ i32 init_config(State* state)
 	if(!state->config.documents_root)
 		state->config.documents_root = str0_dup0(DOCSDIR);
 	
-	global_log_level = state->config.log_level;
+	// global_log_level = state->config.log_level;
 	
 	return 0;
 }
@@ -486,6 +466,7 @@ i32 init_state(State* state)
 		.extra_threads_count   = 0,
 		.disable_authorization = 0,
 		.documents_root        = NULL,
+		.log_level             = LOG_LEVEL_MAX,
 	};
 	state->users_count = 0;
 	state->users       = NULL;
@@ -563,6 +544,40 @@ i32 init_daemon()
 		PRINT_ERROR("daemon() failed");
 		return -1;
 	}
+	return 0;
+}
+
+
+static
+i32 init_print_module()
+{
+	if(mutex_platform_print != NULL)
+		return 0;
+	mutex_platform_print = mmap(NULL, sizeof(pthread_mutex_t), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	if(mutex_platform_print == MAP_FAILED)
+	{
+		PRINT_ERROR("mmap() failed");
+		return -1;
+	}
+	pthread_mutexattr_t attrs;
+	if(pthread_mutexattr_init(&attrs) != 0)
+	{
+		PRINT_ERROR("pthread_mutexattr_init() failed");
+		return -1;
+	}
+	if(pthread_mutexattr_setpshared(&attrs, PTHREAD_PROCESS_SHARED) != 0)
+	{
+		PRINT_ERROR("pthread_mutexattr_setpshared() failed");
+		pthread_mutexattr_destroy(&attrs);
+		return -1;
+	}
+	if(pthread_mutex_init(mutex_platform_print, &attrs) != 0)
+	{
+		PRINT_ERROR("pthread_mutex_init() failed");
+		pthread_mutexattr_destroy(&attrs);
+		return -1;
+	}
+	pthread_mutexattr_destroy(&attrs);
 	return 0;
 }
 
