@@ -327,7 +327,7 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 				int consumed_size = server_parse_request(buffer, recv_total, &request);
 				if(consumed_size < 1)
 				{
-					PRINT_DEBUG("server_parse_request() failed");
+					// PRINT_DEBUG("server_parse_request() failed");
 					memory_free(u8, buffer, buffer_size);
 					return HTTP_STATUS_BAD_REQUEST;
 				}
@@ -382,7 +382,15 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 		}
 	}
 	
-	int noncontent_len = server_parse_request(buffer, recv_total, out_request);
+	HTTPRequest request = {0};
+	int noncontent_len = server_parse_request(buffer, recv_total, &request);
+	if(noncontent_len < 1)
+	{
+		memory_free(u8, buffer, buffer_size);
+		return HTTP_STATUS_BAD_REQUEST;
+	}
+	
+	*out_request = request;
 	if(out_request->method) out_request->method[out_request->method_len] = 0;
 	if(out_request->path)   out_request->path[out_request->path_len]     = 0;
 	
