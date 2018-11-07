@@ -445,6 +445,7 @@ HTTP_STATUS platform_get_resource(State* state, Str0 full_path, u8** out_content
 	}
 	
 	memcpy(resource_data, resource_map, resource_map_size);
+	munmap(resource_map, resource_map_size);
 	
 	*out_content      = resource_data;
 	*out_content_size = resource_map_size;
