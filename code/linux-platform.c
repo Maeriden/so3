@@ -249,19 +249,23 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 ////////////////////////////////////////////////////////////
 
 static
-i32 create_resource_path(State* state, int docsdir_fd, Str0 resource_path, size_t resource_path_len)
+i32 create_resource_path(Str0 full_path)
 {
+	ASSERT(full_path[0] == '/');
+	u32 full_path_len = strlen(full_path);
+	
 	// NOTE: There SHOULD be no problems relative to PATH_MAX
-	for(u32 i = 0; i < resource_path_len; ++i)
+	for(u32 i = 1; i < full_path_len; ++i)
 	{
-		if(resource_path[i] == '/')
+		if(full_path[i] == '/')
 		{
-			resource_path[i] = 0;
-			int error = mkdirat(docsdir_fd, resource_path, 00755);
-			resource_path[i] = '/';
+			full_path[i] = 0;
+			int error = mkdir(full_path, 00755);
+			full_path[i] = '/';
+			
 			if(error && errno != EEXIST)
 			{
-				PRINT_ERROR("mkdir(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+				PRINT_ERROR("mkdir(%s) failed: errno = %s", full_path, errno_as_string);
 				return -1;
 			}
 		}
@@ -269,42 +273,14 @@ i32 create_resource_path(State* state, int docsdir_fd, Str0 resource_path, size_
 	return 0;
 }
 
-HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource_path_len, const u8* content, u32 content_size)
+HTTP_STATUS platform_put_resource(State* state, Str0 full_path, const u8* content, u32 content_size)
 {
-	ASSERT(resource_path != NULL);
-	ASSERT(resource_path_len > 0);
-	ASSERT(resource_path[resource_path_len-1] != '/');
-	ASSERT(str0_beginswith0(resource_path, "/commands") == 0);
+	ASSERT(full_path != NULL);
 	
-	if(resource_path_len == 1 && strcmp(resource_path, "/") == 0)
+	struct stat statbuf;
+	if(stat(full_path, &statbuf) == 0)
 	{
-		resource_path[0] = '.';
-	}
-	else
-	{
-		if(resource_path[0] == '/')
-		{
-			resource_path     += 1;
-			resource_path_len -= 1;
-		}
-		if(resource_path[resource_path_len-1] == '/')
-		{
-			resource_path[resource_path_len-1] = 0;
-			resource_path_len -= 1;
-		}
-	}
-	
-	int docsdir_fd = open_nointr(state->config.documents_root, O_PATH|O_DIRECTORY|O_CLOEXEC, 0);
-	if(docsdir_fd == -1)
-	{
-		PRINT_ERROR("open(%s) failed: errno = %s", state->config.documents_root, errno_as_string);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	struct stat sb;
-	if(fstatat(docsdir_fd, resource_path, &sb, 0) == 0)
-	{
-		if(S_ISDIR(sb.st_mode))
+		if(S_ISDIR(statbuf.st_mode))
 		{
 			// Directory cannot be target of PUT
 			return HTTP_STATUS_METHOD_NOT_ALLOWED;
@@ -312,22 +288,20 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 	}
 	else if(errno != ENOENT)
 	{
-		PRINT_ERROR("stat(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+		PRINT_ERROR("stat(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	
-	if(create_resource_path(state, docsdir_fd, resource_path, resource_path_len) != 0)
+	if(create_resource_path(full_path) != 0)
 	{
-		PRINT_ERROR("create_resource_path(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
-		close(docsdir_fd);
+		PRINT_ERROR("create_resource_path(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	
-	int resource_fd = openat_nointr(docsdir_fd, resource_path, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC, 00644);
-	close(docsdir_fd);
+	int resource_fd = open_nointr(full_path, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC, 00644);
 	if(resource_fd == -1)
 	{
-		PRINT_ERROR("open(%s/%s) failed", state->config.documents_root, resource_path);
+		PRINT_ERROR("open(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
@@ -336,40 +310,19 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 	{
 		if(fshlock_nointr(resource_fd) != 0)
 		{
-			PRINT_ERROR("flock(%s/%s) failed", state->config.documents_root, resource_path);
+			PRINT_ERROR("flock(%s) failed", full_path);
 			close(resource_fd);
 			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 		}
-		
-		#if 0
-		if(ftruncate(resource_fd, content_size) != 0)
-		{
-			PRINT_ERROR("ftruncate(%s/%s) failed", state->config.documents_root, resource_path);
-			close(resource_fd);
-			return RESULT_SERVER_ERROR;
-		}
-		
-		void* resource_map = mmap(NULL, content_size, PROT_WRITE, MAP_SHARED, resource_fd, 0);
-		close(resource_fd);
-		if(resource_map == MAP_FAILED)
-		{
-			PRINT_ERROR("mmap(%s/%s) failed", state->config.documents_root, resource_path);
-			return RESULT_SERVER_ERROR;
-		}
-		memcpy(resource_map, content, content_size);
-		munmap(resource_map, content_size);
-		#else
 		
 		ssize_t write_count = write_nointr(resource_fd, content, content_size);
 		funlock_nointr(resource_fd);
 		if(write_count != content_size)
 		{
-			PRINT_ERROR("write(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+			PRINT_ERROR("write(%s) failed: errno = %s", full_path, errno_as_string);
 			close(resource_fd);
 			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 		}
-		
-		#endif
 	}
 	
 	close(resource_fd);
@@ -383,13 +336,13 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 ////////////////////////////////////////////////////////////
 
 static
-HTTP_STATUS get_directory_listing(State* state, int resource_fd, const_Str0 resource_path, u8** out_content, u32* out_content_size)
+HTTP_STATUS get_directory_listing(State* state, int resource_fd, const_Str0 full_path, u8** out_content, u32* out_content_size)
 {
 	struct dirent** entries = NULL;
 	int entries_count = scandirat(resource_fd, "", &entries, NULL, alphasort);
 	if(entries_count < 0)
 	{
-		PRINT_ERROR("scandir(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+		PRINT_ERROR("scandir(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	if(entries_count == 0)
@@ -436,6 +389,73 @@ HTTP_STATUS get_directory_listing(State* state, int resource_fd, const_Str0 reso
 	return HTTP_STATUS_OK;
 }
 
+HTTP_STATUS platform_get_resource(State* state, Str0 full_path, u8** out_content, u32* out_content_size)
+{
+	ASSERT(full_path != NULL);
+	*out_content      = NULL;
+	*out_content_size = 0;
+	
+	int resource_fd = open_nointr(full_path, O_RDONLY|O_CLOEXEC, 0);
+	if(resource_fd == -1)
+	{
+		if(errno == ENOENT)
+			return HTTP_STATUS_NOT_FOUND;
+		PRINT_ERROR("open(%s) failed: errno = %s", full_path, errno_as_string);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+	
+	// NOTE: Closing the file releases the lock
+	if(fshlock_nointr(resource_fd) != 0)
+	{
+		PRINT_ERROR("flock(%s) failed: errno = %s", full_path, errno_as_string);
+		close(resource_fd);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+	
+	struct stat statbuf;
+	if(fstat(resource_fd, &statbuf) != 0)
+	{
+		PRINT_ERROR("stat(%s) failed: errno = %s", full_path, errno_as_string);
+		close(resource_fd);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+	
+	if(S_ISDIR(statbuf.st_mode))
+	{
+		i32 error = get_directory_listing(state, resource_fd, full_path, out_content, out_content_size);
+		close(resource_fd);
+		return error;
+	}
+	
+	u32   resource_map_size = statbuf.st_size;
+	void* resource_map      = mmap(NULL, resource_map_size, PROT_READ, MAP_PRIVATE, resource_fd, 0);
+	funlock_nointr(resource_fd);
+	close(resource_fd);
+	if(resource_map == MAP_FAILED)
+	{
+		PRINT_ERROR("mmap(%s) failed: errno = %s", full_path, errno_as_string);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+	
+	void* resource_data = memory_alloc(u8, resource_map_size);
+	if(!resource_data)
+	{
+		munmap(resource_map, resource_map_size);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+	
+	memcpy(resource_data, resource_map, resource_map_size);
+	
+	*out_content      = resource_data;
+	*out_content_size = resource_map_size;
+	return HTTP_STATUS_OK;
+}
+
+
+
+////////////////////////////////////////////////////////////
+// PLATFORM FUNCTIONS: RUN RESOURCE                       //
+////////////////////////////////////////////////////////////
 
 static
 HTTP_STATUS get_command_result(process_t subproc, int subproc_stdout, u8** out_output, u32* out_output_size)
@@ -485,53 +505,39 @@ HTTP_STATUS get_command_result(process_t subproc, int subproc_stdout, u8** out_o
 	return HTTP_STATUS_OK;
 }
 
-static
-HTTP_STATUS run_command(State* state, int docsdir_fd, Str0 resource_path, u32 resource_path_len, u8** out_output, u32* out_output_size)
+HTTP_STATUS platform_run_resource(State* state, Str0 full_path, u8** out_output, u32* out_output_size)
 {
+	ASSERT(full_path != NULL);
 	*out_output      = NULL;
 	*out_output_size = 0;
-	if(!(resource_path && resource_path_len))
-		return HTTP_STATUS_NOT_FOUND;
 	
-	if(resource_path[0] == '/')
-	{
-		resource_path     += 1;
-		resource_path_len -= 1;
-	}
-	if(resource_path[resource_path_len-1] == '/')
-	{
-		resource_path[resource_path_len-1] = 0;
-		resource_path_len -= 1;
-	}
-	
-	int resource_fd = openat_nointr(docsdir_fd, resource_path, O_PATH|O_CLOEXEC, 0);
+	int resource_fd = open_nointr(full_path, O_PATH|O_CLOEXEC, 0);
 	if(resource_fd == -1)
 	{
 		if(errno == ENOENT)
 			return HTTP_STATUS_NOT_FOUND;
-		PRINT_ERROR("open(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+		PRINT_ERROR("open(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	
-	struct stat sb;
-	if(fstat(resource_fd, &sb) != 0)
+	struct stat statbuf;
+	if(fstat(resource_fd, &statbuf) != 0)
 	{
 		ASSERT(errno != ENOENT);
-		PRINT_ERROR("stat(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+		PRINT_ERROR("stat(%s) failed: errno = %s", full_path, errno_as_string);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 	
-	if(!S_ISREG(sb.st_mode))
+	if(!S_ISREG(statbuf.st_mode))
 	{
 		close(resource_fd);
 		// Let's just say we don't support executing a non-regular file
 		return HTTP_STATUS_METHOD_NOT_ALLOWED;
 	}
 	
-	// TODO: man 2 faccessat does not list AT_EMPTY_PATH as a valid flag; check if it works
-	if(faccessat(resource_fd, "", X_OK, AT_EMPTY_PATH) != 0)
+	if(access(full_path, X_OK) != 0)
 	{
-		PRINT_WARN("Requested execution of %s/%s but the server does not have execute permission", state->config.documents_root, resource_path);
+		PRINT_WARN("Requested execution of %s but the server does not have execute permission", full_path);
 		close(resource_fd);
 		// A non-executable file in the commands directory is a configuration error
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
@@ -558,9 +564,9 @@ HTTP_STATUS run_command(State* state, int docsdir_fd, Str0 resource_path, u32 re
 		close(pipe_stdou[1]);
 		
 		// FIXME: argv[0] is probably wrong? what are the rules for the first argument?
-		char* argv[] = {resource_path, NULL};
+		char* argv[] = {full_path, NULL};
 		fexecve(resource_fd, argv, environ);
-		PRINT_ERROR("exec(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
+		PRINT_ERROR("exec(%s) failed: errno = %s", full_path, errno_as_string);
 		exit(EXIT_FAILURE);
 	}
 	close(resource_fd);
@@ -569,99 +575,4 @@ HTTP_STATUS run_command(State* state, int docsdir_fd, Str0 resource_path, u32 re
 	HTTP_STATUS result = get_command_result(pid, pipe_stdou[0], out_output, out_output_size);
 	close(pipe_stdou[0]);
 	return result;
-}
-
-HTTP_STATUS platform_get_resource(State* state, Str0 resource_path, u32 resource_path_len, u8** out_content, u32* out_content_size)
-{
-	*out_content      = NULL;
-	*out_content_size = 0;
-	if(!(resource_path && resource_path_len))
-		return HTTP_STATUS_NOT_FOUND;
-	
-	int docsdir_fd = open_nointr(state->config.documents_root, O_RDONLY|O_DIRECTORY|O_PATH|O_CLOEXEC, 0);
-	if(docsdir_fd == -1)
-	{
-		PRINT_ERROR("open(%s) failed: errno = %s", state->config.documents_root, errno_as_string);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	if(str0_beginswith0(resource_path, "/commands"))
-	{
-		HTTP_STATUS result = run_command(state, docsdir_fd, resource_path, resource_path_len, out_content, out_content_size);
-		close(docsdir_fd);
-		return result;
-	}
-	
-	if(resource_path_len == 1 && strcmp(resource_path, "/") == 0)
-	{
-		resource_path[0] = '.';
-	}
-	else
-	{
-		if(resource_path[0] == '/')
-		{
-			resource_path     += 1;
-			resource_path_len -= 1;
-		}
-		if(resource_path[resource_path_len-1] == '/')
-		{
-			resource_path[resource_path_len-1] = 0;
-			resource_path_len -= 1;
-		}
-	}
-	
-	int resource_fd = openat_nointr(docsdir_fd, resource_path, O_RDONLY|O_CLOEXEC, 0);
-	close(docsdir_fd);
-	if(resource_fd == -1)
-	{
-		if(errno == ENOENT)
-			return HTTP_STATUS_NOT_FOUND;
-		PRINT_ERROR("open(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	// NOTE: Closing the file releases the lock
-	if(fshlock_nointr(resource_fd) != 0)
-	{
-		PRINT_ERROR("flock(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
-		close(resource_fd);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	struct stat statbuf;
-	if(fstat(resource_fd, &statbuf) != 0)
-	{
-		PRINT_ERROR("stat(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
-		close(resource_fd);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	if(S_ISDIR(statbuf.st_mode))
-	{
-		i32 error = get_directory_listing(state, resource_fd, resource_path, out_content, out_content_size);
-		close(resource_fd);
-		return error;
-	}
-	
-	u32   resource_map_size = statbuf.st_size;
-	void* resource_map      = mmap(NULL, resource_map_size, PROT_READ, MAP_PRIVATE, resource_fd, 0);
-	funlock_nointr(resource_fd);
-	close(resource_fd);
-	if(resource_map == MAP_FAILED)
-	{
-		PRINT_ERROR("mmap(%s/%s) failed: errno = %s", state->config.documents_root, resource_path, errno_as_string);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	
-	void* resource_data = memory_alloc(u8, resource_map_size);
-	if(!resource_data)
-	{
-		munmap(resource_map, resource_map_size);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-	memcpy(resource_data, resource_map, resource_map_size);
-	
-	*out_content      = resource_data;
-	*out_content_size = resource_map_size;
-	return HTTP_STATUS_OK;
 }

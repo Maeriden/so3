@@ -248,8 +248,10 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 ////////////////////////////////////////////////////////////
 
 static
-i32 create_resource_path(Str0 full_path, u32 full_path_len)
+i32 create_resource_path(Str0 full_path)
 {
+	u32 full_path_len = strlen(full_path);
+	
 	// TODO: Remove MAX_PATH limitation by using CreateDirectoryW()
 	if(full_path_len >= 248)
 	{
@@ -275,17 +277,9 @@ i32 create_resource_path(Str0 full_path, u32 full_path_len)
 	return 0;
 }
 
-HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource_path_len, const u8* content, u32 content_size)
+HTTP_STATUS platform_put_resource(State* state, Str0 full_path, const u8* content, u32 content_size)
 {
-	ASSERT(resource_path != NULL);
-	ASSERT(resource_path_len > 0);
-	ASSERT(resource_path[resource_path_len-1] != '/');
-	ASSERT(str0_beginswith0(resource_path, "/commands") == FALSE);
-
-	Str0 full_path = str0_cat0(state->config.documents_root, resource_path);
-	if(!full_path)
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	u32 full_path_len = strlen(full_path);
+	ASSERT(full_path != NULL);
 
 	WIN32_FILE_ATTRIBUTE_DATA attrs;
 	if(GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
@@ -308,7 +302,7 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
-	if(create_resource_path(full_path, full_path_len) != 0)
+	if(create_resource_path(full_path, strlen(full_path)) != 0)
 	{
 		PRINT_ERROR("create_resource_path(%s) failed", full_path);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
@@ -353,10 +347,10 @@ HTTP_STATUS platform_put_resource(State* state, Str0 resource_path, u32 resource
 ////////////////////////////////////////////////////////////
 
 static
-HTTP_STATUS get_directory_listing(const_Str0 path, u8** out_content, u32* out_content_size)
+HTTP_STATUS get_directory_listing(const_Str0 full_path, u8** out_content, u32* out_content_size)
 {
 	struct dirent** entries = NULL;
-	int entries_count = scandir(path, &entries, NULL, alphasort);
+	int entries_count = scandir(full_path, &entries, NULL, alphasort);
 	if(entries_count < 0)
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	if(entries_count == 0)
@@ -402,6 +396,91 @@ HTTP_STATUS get_directory_listing(const_Str0 path, u8** out_content, u32* out_co
 	free(entries);
 	return HTTP_STATUS_OK;
 }
+
+HTTP_STATUS platform_get_resource(State* state, Str0 full_path, u8** out_content, u32* out_content_size)
+{
+	ASSERT(full_path != NULL);
+	*out_content      = NULL;
+	*out_content_size = 0;
+
+	WIN32_FILE_ATTRIBUTE_DATA attrs;
+	if(!GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
+	{
+		if(GetLastError() == ERROR_FILE_NOT_FOUND)
+			return HTTP_STATUS_NOT_FOUND;
+		PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
+	if(attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		HTTP_STATUS status = get_directory_listing(full_path, out_content, out_content_size);
+		if(status)
+			PRINT_ERROR("get_directory_listing(%s) failed", full_path);
+		return status;
+	}
+
+	HANDLE resource_fd = CreateFileA(full_path, FILE_GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(resource_fd == INVALID_HANDLE_VALUE)
+	{
+		if(GetLastError() == ERROR_FILE_NOT_FOUND)
+			return HTTP_STATUS_NOT_FOUND;
+		PRINT_ERROR("CreateFileA(%s) failed: GLE = %s", full_path, LastErrorAsString);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
+	if(!LockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh) != 0)
+	{
+		PRINT_ERROR("LockFile(%s) failed", full_path);
+		CloseHandle(resource_fd);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
+	HANDLE map = CreateFileMappingA(resource_fd, NULL, PAGE_READONLY, attrs.nFileSizeHigh, attrs.nFileSizeLow, NULL);
+	if(map == INVALID_HANDLE_VALUE)
+	{
+		PRINT_ERROR("CreateFileMappingA(%s) failed", full_path);
+		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
+		CloseHandle(resource_fd);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
+	LPVOID map_view = MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+	if(map_view == NULL)
+	{
+		PRINT_ERROR("MapViewOfFile(%s) failed", full_path);
+		CloseHandle(map);
+		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
+		CloseHandle(resource_fd);
+	}
+
+	u32   resource_data_size = attrs.nFileSizeLow;
+	void* resource_data      = memory_alloc(u8, resource_data_size);
+	if(!resource_data)
+	{
+		UnmapViewOfFile(map_view);
+		CloseHandle(map);
+		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
+		CloseHandle(resource_fd);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
+	memcpy(resource_data, map_view, resource_data_size);
+	UnmapViewOfFile(map_view);
+	CloseHandle(map);
+	UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
+	CloseHandle(resource_fd);
+
+	*out_content_size = resource_data_size;
+	*out_content      = resource_data;
+	return HTTP_STATUS_OK;
+}
+
+
+
+////////////////////////////////////////////////////////////
+// PLATFORM FUNCTIONS: RUN RESOURCE                       //
+////////////////////////////////////////////////////////////
 
 static
 HTTP_STATUS get_command_result(process_t subproc, filedes_t subproc_stdout, u8** out_output, u32* out_output_size)
@@ -449,8 +528,9 @@ HTTP_STATUS get_command_result(process_t subproc, filedes_t subproc_stdout, u8**
 }
 
 static
-HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len, u8** out_output, u32* out_output_size)
+HTTP_STATUS platform_run_resource(State* state, Str0 full_path, u8** out_output, u32* out_output_size)
 {
+	ASSERT(full_path != NULL);
 	// TODO: Check resource type: must be an executable
 	
 	SECURITY_ATTRIBUTES pipes_attrs = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
@@ -475,7 +555,7 @@ HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len,
 	si.hStdOutput = pipe_stdou[1];
 	si.hStdError  = pipe_stdou[1];
 	PROCESS_INFORMATION pi = {0};
-	if(!CreateProcessA(resource_path, NULL, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+	if(!CreateProcessA(full_path, NULL, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
 	{
 		PRINT_ERROR("CreateProcessA() failed: GLE = %s", LastErrorAsString);
 		CloseHandle(pipe_stdou[0]);
@@ -491,96 +571,4 @@ HTTP_STATUS run_command(State* state, Str0 resource_path, u32 resource_path_len,
 	CloseHandle(pipe_stdou[0]);
 	CloseHandle(pi.hProcess);
 	return status;
-}
-
-HTTP_STATUS platform_get_resource(State* state, Str0 resource_path, u32 resource_path_len, u8** out_content, u32* out_content_size)
-{
-	*out_content      = NULL;
-	*out_content_size = 0;
-	
-	if(!(resource_path && resource_path_len))
-		return HTTP_STATUS_NOT_FOUND;
-	ASSERT(resource_path[resource_path_len-1] != '/');
-
-	if(str0_beginswith0(resource_path, "/commands"))
-	{
-		return run_command(state, resource_path, resource_path_len, out_content, out_content_size);
-	}
-
-	Str0 local_path = str0_cat0(state->config.documents_root, resource_path);
-	if(!local_path)
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-
-	WIN32_FILE_ATTRIBUTE_DATA attrs;
-	if(!GetFileAttributesExA(local_path, GetFileExInfoStandard, &attrs))
-	{
-		if(GetLastError() == ERROR_FILE_NOT_FOUND)
-			return HTTP_STATUS_NOT_FOUND;
-		PRINT_ERROR("GetFileAttributesExA(%s) failed", local_path);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-
-	if(attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-	{
-		HTTP_STATUS status = get_directory_listing(local_path, out_content, out_content_size);
-		if(status)
-			PRINT_ERROR("get_directory_listing(%s) failed", local_path);
-		return status;
-	}
-
-	HANDLE resource_fd = CreateFileA(local_path, FILE_GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(resource_fd == INVALID_HANDLE_VALUE)
-	{
-		if(GetLastError() == ERROR_FILE_NOT_FOUND)
-			return HTTP_STATUS_NOT_FOUND;
-		PRINT_ERROR("CreateFileA(%s) failed: GLE = %s", local_path, LastErrorAsString);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-
-	if(!LockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh) != 0)
-	{
-		PRINT_ERROR("LockFile(%s) failed", local_path);
-		CloseHandle(resource_fd);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-
-	HANDLE map = CreateFileMappingA(resource_fd, NULL, PAGE_READONLY, attrs.nFileSizeHigh, attrs.nFileSizeLow, NULL);
-	if(map == INVALID_HANDLE_VALUE)
-	{
-		PRINT_ERROR("CreateFileMappingA(%s) failed", local_path);
-		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
-		CloseHandle(resource_fd);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-
-	LPVOID map_view = MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
-	if(map_view == NULL)
-	{
-		PRINT_ERROR("MapViewOfFile(%s) failed", local_path);
-		CloseHandle(map);
-		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
-		CloseHandle(resource_fd);
-	}
-
-	u32   resource_data_size = attrs.nFileSizeLow;
-	void* resource_data      = memory_alloc(u8, resource_data_size);
-	if(!resource_data)
-	{
-		UnmapViewOfFile(map_view);
-		CloseHandle(map);
-		UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
-		CloseHandle(resource_fd);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
-
-	memcpy(resource_data, map_view, resource_data_size);
-
-	UnmapViewOfFile(map_view);
-	CloseHandle(map);
-	UnlockFile(resource_fd, 0, 0, attrs.nFileSizeLow, attrs.nFileSizeHigh);
-	CloseHandle(resource_fd);
-
-	*out_content_size = resource_data_size;
-	*out_content      = resource_data;
-	return HTTP_STATUS_OK;
 }
