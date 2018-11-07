@@ -33,26 +33,30 @@ ln -s "/bin/date" "${docsdir}/commands/"
 
 
 
-cat > "${docsdir}/file.txt" << EOF
-Contenuto di file.txt
-EOF
+echo "Contenuto di file.txt" > "${docsdir}/file.txt"
 
 
 
-dd if=/dev/zero    bs=1K count=1  > "${docsdir}/zero.bin"                    #  1KB file of zeroes
+dd if=/dev/zero    bs=1K count=1                     > "${docsdir}/zero.bin" #  1KB file of zeroes
+
 dd if=/dev/zero    bs=1K count=1  | tr "\000" "\377" > "${docsdir}/one.bin"  #  1KB file of ones
-dd if=/dev/urandom bs=1M count=64 | tr "\000" "\377" > "${docsdir}/rand.bin" # 16MB file of random data
+
+dd if=/dev/urandom bs=1M count=32 | tr "\000" "\377" > "${docsdir}/rand.bin" # 32MB file of random data
 
 
 
 mkdir -p "${docsdir}/subdir"
 
-cat > "${docsdir}/subdir/1.txt" << EOF
-Contenuto di ${docsdir}/subdir/1.txt
-EOF
-cat > "${docsdir}/subdir/2.txt" << EOF
-Contenuto di ${docsdir}/subdir/2.txt
-EOF
-cat > "${docsdir}/subdir/3.txt" << EOF
-Contenuto di ${docsdir}/subdir/3.txt
-EOF
+f="${docsdir}/subdir/1.txt" echo "Contenuto di ${f}" > "${f}"
+f="${docsdir}/subdir/2.txt" echo "Contenuto di ${f}" > "${f}"
+f="${docsdir}/subdir/3.txt" echo "Contenuto di ${f}" > "${f}"
+
+
+
+if [ ! -f "file.txt" ]; then
+	echo "Contenuto di file.txt" > "file.txt"
+fi
+
+if [ ! -f "rand.bin" ]; then
+	dd if=/dev/urandom bs=1M count=16 | tr "\000" "\377" > "rand.bin"
+fi
