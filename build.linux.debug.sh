@@ -17,19 +17,13 @@ gcc  "obj/linux-main.o" -o"bin/server" ${lflags} -pthread
 [ $? -eq 0 ] || exit 1
 
 
-if [ -f code/client-get-linux.c ]; then
-	echo "[$(date +%T)] Building GET client"
-	gcc "code/client-get-linux.c" -o"bin/get" ${cflags} ${dflags} ${define} ${lflags}
-fi
+# if [ -f code/client-get-linux.c ]; then
+# 	echo "[$(date +%T)] Building GET client"
+# 	gcc "code/client-get-linux.c" -o"bin/get" ${cflags} ${dflags} ${define} ${lflags}
+# fi
 
 
-if [ -f code/client-put-linux.c ]; then
-	echo "[$(date +%T)] Building PUT client"
-	gcc "code/client-put-linux.c" -o"bin/put" ${cflags} ${dflags} ${define} ${lflags}
-fi
-
-
-if [ ! -f bin/setup.sh ] && [ -f test/setup.sh ]; then
-	echo "[$(date +%T)] Creating bin/setup.sh"
-	cp test/setup.sh bin/setup.sh
-fi
+# if [ -f code/client-put-linux.c ]; then
+# 	echo "[$(date +%T)] Building PUT client"
+# 	gcc "code/client-put-linux.c" -o"bin/put" ${cflags} ${dflags} ${define} ${lflags}
+# fi
