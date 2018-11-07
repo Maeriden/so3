@@ -137,8 +137,8 @@ i32 server_encrypt_response(u8* response_content, u32 response_content_size, u32
 	if(!buffer)
 		return -1;
 	
-	u32 buffer_count = buffer_size / sizeof(u32);
 	memcpy(buffer, response_content, response_content_size);
+	u32 buffer_count = buffer_size / sizeof(*buffer);
 	for(u32 i = 0; i < buffer_count; ++i)
 		buffer[i] = buffer[i] ^ encryption_key;
 	memcpy(response_content, buffer, response_content_size);
@@ -240,10 +240,18 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 			return HTTP_STATUS_FORBIDDEN;
 		}
 		
-		HTTP_STATUS http_status = platform_put_resource(state, request->path, request->path_len, request->content, request->content_len);
+		Str0 full_path = str0_cat0(state->config.documents_root, request->path);
+		if(!full_path)
+		{
+			*out_syslog_resource_size = 0;
+			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+		}
+		
+		HTTP_STATUS http_status = platform_put_resource(state, full_path, request->content, request->content_len);
+		str0_free(full_path, strlen(full_path));
 		if(HTTP_STATUS_IS_SERVER_ERROR(http_status))
 		{
-			PRINT_ERROR("put_resource_content() failed");
+			PRINT_ERROR("platform_put_resource() failed");
 		}
 		
 		return http_status;
@@ -259,13 +267,29 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 			request->path -= 1;
 		}
 		
-		HTTP_STATUS http_status = platform_get_resource(state, request->path, request->path_len, out_response, out_response_size);
-		if(HTTP_STATUS_IS_SERVER_ERROR(http_status))
+		Str0 full_path = str0_cat0(state->config.documents_root, request->path);
+		if(!full_path)
 		{
-			PRINT_ERROR("get_resource_content() failed");
+			*out_syslog_resource_size = 0;
+			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 		}
-		*out_syslog_resource_size = *out_response_size;
 		
+		HTTP_STATUS http_status = 0;
+		if(str0_beginswith0(request->path, "/commands"))
+		{
+			http_status = platform_run_resource(state, full_path, out_response, out_response_size);
+			if(HTTP_STATUS_IS_SERVER_ERROR(http_status))
+				PRINT_ERROR("platform_run_command() failed");
+		}
+		else
+		{
+			http_status = platform_get_resource(state, full_path, out_response, out_response_size);
+			if(HTTP_STATUS_IS_SERVER_ERROR(http_status))
+				PRINT_ERROR("platform_get_resource() failed");
+		}
+		
+		str0_free(full_path, strlen(full_path));
+		*out_syslog_resource_size = *out_response_size;
 		return http_status;
 	}
 	
@@ -354,13 +378,6 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 					
 					// TODO: Perform a final allocation now that the message size is known?
 				}
-				else
-				{
-					// NOTE: Seems like not sending a Content-Length in a GET is ok
-					//PRINT_DEBUG("server_find_header(%s) failed", "Content-Length");
-					//memory_free(u8, buffer, buffer_size);
-					//return HTTP_STATUS_BAD_REQUEST;
-				}
 			}
 		}
 		
@@ -420,7 +437,7 @@ void server_serve_client(State* state, socket_t socket, u32 encryption_key, u8 a
 	if(HTTP_STATUS_IS_SUCCESS(http_status))
 	{
 		http_status = server_handle_request(state, socket, &request, &response_buffer, &response_buffer_size, &syslog_resource_size);
-		if(HTTP_STATUS_IS_SUCCESS(http_status))
+		if(HTTP_STATUS_IS_SUCCESS(http_status) && encryption_key != 0)
 		{
 			if(server_encrypt_response(response_buffer, response_buffer_size, encryption_key) != 0)
 			{

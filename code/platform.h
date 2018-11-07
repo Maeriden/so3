@@ -130,8 +130,9 @@ typedef enum HTTP_STATUS
 	HTTP_STATUS_NOT_IMPLEMENTED       = 501,
 } HTTP_STATUS;
 
-HTTP_STATUS platform_put_resource (State* state, Str0 resource_path, u32 resource_path_len, const u8* content, u32 content_size);
-HTTP_STATUS platform_get_resource (State* state, Str0 resource_path, u32 resource_path_len, u8** out_content, u32* out_content_size);
+HTTP_STATUS platform_put_resource (State* state, Str0 full_path, const u8* content, u32 content_size);
+HTTP_STATUS platform_get_resource (State* state, Str0 full_path, u8** out_content, u32* out_content_size);
+HTTP_STATUS platform_run_resource (State* state, Str0 full_path, u8** out_content, u32* out_content_size);
 
 
 
