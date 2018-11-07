@@ -540,8 +540,7 @@ i32 init_syslog()
 static
 i32 init_daemon()
 {
-	// TODO: Set second argument to 0
-	if(daemon(0, 1) != 0)
+	if(daemon(1, 0) != 0)
 	{
 		PRINT_ERROR("daemon() failed");
 		return -1;
