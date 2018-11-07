@@ -113,8 +113,8 @@ typedef struct ThreadTaskArgs
 {
 	State*   state;
 	socket_t socket;
+	u16      listen_port;
 	u32      address;
-	u16      port;
 } ThreadTaskArgs;
 
 static
@@ -124,7 +124,7 @@ void thread_pool_task(void* param)
 	State* state   = args->state;
 	int    socket  = args->socket;
 	u32    address = args->address;
-	u16    port    = args->port;
+	u16    port    = args->listen_port;
 	
 	u32 encryption_key = 0;
 	if(port == state->config.listen_port_crypt)
@@ -210,6 +210,8 @@ i32 handle_connections(State* state)
 	pollfds[0].events = POLLIN | POLLRDHUP;
 	pollfds[1].events = POLLIN | POLLRDHUP;
 	
+	u16 listen_ports[2] = {state->config.listen_port_plain, state->config.listen_port_crypt};
+	
 	b32 running = 1;
 	while(running)
 	{
@@ -262,10 +264,10 @@ i32 handle_connections(State* state)
 					close(client_socket);
 					continue;
 				}
-				args->state   = state;
-				args->socket  = client_socket;
-				args->address = sockaddr.sin_addr.s_addr;
-				args->port    = sockaddr.sin_port;
+				args->state       = state;
+				args->socket      = client_socket;
+				args->listen_port = listen_ports[i];
+				args->address     = sockaddr.sin_addr.s_addr;
 				
 				if(thread_pool_enqueue_task(state->thread_pool, task, args) != 0)
 				{

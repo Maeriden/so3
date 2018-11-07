@@ -100,8 +100,8 @@ typedef struct ThreadTaskArgs
 {
 	State*   state;
 	socket_t socket;
+	u16      listen_port;
 	u32      address;
-	u16      port;
 } ThreadTaskArgs;
 
 static
@@ -192,7 +192,9 @@ i32 handle_connections(State* state)
 	pollfds[1].fd = state->listen_socket_crypt;
 	pollfds[0].events = POLLIN;
 	pollfds[1].events = POLLIN;
-	
+
+	u16 listen_ports[2] = {state->config.listen_port_plain, state->config.listen_port_crypt};
+
 	b32 running = 1;
 	while(running)
 	{
@@ -201,7 +203,7 @@ i32 handle_connections(State* state)
 			PRINT_ERROR("WSAPoll() failed: %s", WSALastErrorAsString);
 			break;
 		}
-	
+
 		for(u32 i = 0; i < ARRAY_COUNT(pollfds); ++i)
 		{
 			if(pollfds[i].revents & POLLHUP)
@@ -227,9 +229,9 @@ i32 handle_connections(State* state)
 					PRINT_ERROR("accept() failed: %s", WSALastErrorAsString);
 					continue;
 				}
-	
+
 				PRINT_DEBUG("POLLIN %i", (int)pollfds[i].fd);
-	
+
 				ThreadTask*     task = thread_pool_task;
 				ThreadTaskArgs* args = memory_alloc(ThreadTaskArgs, 1);
 				if(!args)
@@ -240,10 +242,10 @@ i32 handle_connections(State* state)
 					closesocket(client_socket);
 					continue;
 				}
-				args->state   = state;
-				args->socket  = client_socket;
-				args->address = sockaddr.sin_addr.s_addr;
-				args->port    = sockaddr.sin_port;
+				args->state       = state;
+				args->socket      = client_socket;
+				args->listen_port = listen_ports[i];
+				args->address     = sockaddr.sin_addr.s_addr;
 	
 				if(thread_pool_enqueue_task(state->thread_pool, task, args) != 0)
 				{
