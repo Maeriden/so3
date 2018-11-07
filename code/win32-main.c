@@ -85,8 +85,8 @@ State global_state = {
 #endif
 
 
-#include "win32-utils.c"
 #include "utils.c"
+#include "win32-utils.c"
 #include "win32-args.c"
 #include "win32-platform.c"
 #include "thread_pool.c"
