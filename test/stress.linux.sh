@@ -57,14 +57,16 @@ case "${1}" in
 	
 "GET")
 	for (( i = 1; i <= ${request_count}; ++i )); do
-		get $i "${logpath}/$i.txt" "file" &
+		get $i "${logpath}/$i.txt" "file.txt" &
+		# get $i "${logpath}/$i.txt" "rand.bin" &
 	done
 	wait
 	;;
 
 "PUT")
 	for (( i = 1; i <= ${request_count}; ++i )); do
-		put $i "${logpath}/$i.txt" "${datedir}/$i.txt" "putfile.txt" &
+		put $i "${logpath}/$i.txt" "${datedir}/$i.txt" "file.txt" &
+		# put $i "${logpath}/$i.txt" "${datedir}/$i.txt" "rand.bin" &
 	done
 	wait
 	;;
