@@ -50,7 +50,7 @@ void platform_print(const_Str0 file, int line, u32 level, const_Str0 prefix, con
 	}
 }
 
-i32 platform_syslog(u8 address[4], const_Str0 userid, const_Str0 method, const_Str0 path, u32 minor, u32 status, u32 resource_size)
+i32 platform_syslog(ipv4_addr_t address, const_Str0 userid, const_Str0 method, const_Str0 path, u32 minor, u32 status, u32 resource_size)
 {
 	// 80.116.239.218 - - [17/Jul/2011:18:29:19 +0100]  "GET /attivita/convegno1/libro1/gz/06-trio.ps.gz HTTP/1.0" 200 65536
 	static const_Str0 STRFTIME_FORMAT = "%d/%b/%Y:%H:%M:%S %z";
@@ -66,7 +66,7 @@ i32 platform_syslog(u8 address[4], const_Str0 userid, const_Str0 method, const_S
 	static const_Str0 SYSLOG_FORMAT = "%s: %hhu.%hhu.%hhu.%hhu - %s [%s] \"%s %s HTTP/1.%u\" %u %u\n";
 	u32 buffer_len = snprintf(NULL, 0, SYSLOG_FORMAT,
 		__argv[0],
-		address[0], address[1], address[2], address[3],
+		address.oct[0], address.oct[1], address.oct[2], address.oct[3],
 		userid, strftime_buffer,
 		method, path, minor,
 		status, resource_size);
@@ -76,7 +76,7 @@ i32 platform_syslog(u8 address[4], const_Str0 userid, const_Str0 method, const_S
 
 	snprintf(buffer, buffer_len+1, SYSLOG_FORMAT,
 		__argv[0],
-		address[0], address[1], address[2], address[3],
+		address.oct[0], address.oct[1], address.oct[2], address.oct[3],
 		userid, strftime_buffer,
 		method, path, minor,
 		status, resource_size);

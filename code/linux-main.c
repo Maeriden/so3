@@ -111,28 +111,28 @@ ThreadPool global_thread_pool = {};
 
 typedef struct ThreadTaskArgs
 {
-	State*   state;
-	socket_t socket;
-	u16      listen_port;
-	u32      address;
+	State*      state;
+	socket_t    socket;
+	u16         listen_port;
+	ipv4_addr_t address;
 } ThreadTaskArgs;
 
 static
 void thread_pool_task(void* param)
 {
 	ThreadTaskArgs* args = param;
-	State* state   = args->state;
-	int    socket  = args->socket;
-	u32    address = args->address;
-	u16    port    = args->listen_port;
+	State*      state       = args->state;
+	int         socket      = args->socket;
+	u16         listen_port = args->listen_port;
+	ipv4_addr_t address     = args->address;
 	
 	u32 encryption_key = 0;
-	if(port == state->config.listen_port_crypt)
+	if(listen_port == state->config.listen_port_crypt)
 	{
-		srand(address);
+		srand(address.dec);
 		encryption_key = rand();
 	}
-	server_serve_client(state, socket, encryption_key, (u8*)&address);
+	server_serve_client(state, socket, encryption_key, address);
 	shutdown(socket, SOCKET_SHUTDOWN_RW);
 	close(socket);
 	
@@ -229,6 +229,7 @@ i32 handle_connections(State* state)
 			{
 				PRINT_DEBUG("POLLHUP %i", pollfds[i].fd);
 				pollfds[i].fd = -pollfds[i].fd;
+				
 				// If the other fd is ignored, break
 				if(pollfds[(i+1) % 2].fd < 0)
 				{
@@ -248,34 +249,32 @@ i32 handle_connections(State* state)
 					continue;
 				}
 				
-				// Put socket in blocking mode (should be the default)
-				// int flags = fcntl(client_socket, F_GETFD);
-				// fcntl(client_socket, F_SETFD, flags & ~O_NONBLOCK);
-				
 				PRINT_DEBUG("POLLIN %i", (int)pollfds[i].fd);
 				
 				ThreadTask*     task = thread_pool_task;
 				ThreadTaskArgs* args = memory_alloc(ThreadTaskArgs, 1);
 				if(!args)
 				{
-					u8* addr = (u8*)&sockaddr.sin_addr.s_addr;
+					u8* addr = args->address.oct;
 					PRINT_ERROR("Dropping connection to %hhu.%hhu.%hhu.%hhu", addr[0], addr[1], addr[2], addr[3]);
-					shutdown(client_socket, SHUT_RDWR);
+					shutdown(client_socket, SOCKET_SHUTDOWN_RW);
 					close(client_socket);
+					memory_free(ThreadTaskArgs, args, 1);
 					continue;
 				}
 				args->state       = state;
 				args->socket      = client_socket;
 				args->listen_port = listen_ports[i];
-				args->address     = sockaddr.sin_addr.s_addr;
+				args->address.dec = sockaddr.sin_addr.s_addr;
 				
 				if(thread_pool_enqueue_task(state->thread_pool, task, args) != 0)
 				{
 					PRINT_ERROR("thread_pool_enqueue_task() failed");
-					u8* addr = (u8*)&sockaddr.sin_addr.s_addr;
+					u8* addr = args->address.oct;
 					PRINT_ERROR("Dropping connection to %hhu.%hhu.%hhu.%hhu", addr[0], addr[1], addr[2], addr[3]);
-					shutdown(client_socket, SHUT_RDWR);
+					shutdown(client_socket, SOCKET_SHUTDOWN_RW);
 					close(client_socket);
+					memory_free(ThreadTaskArgs, args, 1);
 					running = 0;
 				}
 			}

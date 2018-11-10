@@ -421,7 +421,7 @@ HTTP_STATUS server_recv_request(socket_t socket, u8** out_buffer, u32* out_buffe
 }
 
 
-void server_serve_client(State* state, socket_t socket, u32 encryption_key, u8 address[4])
+void server_serve_client(State* state, socket_t socket, u32 encryption_key, ipv4_addr_t address)
 {
 	u32 request_buffer_size = 0;
 	u8* request_buffer      = NULL;

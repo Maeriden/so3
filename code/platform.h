@@ -16,6 +16,12 @@ typedef u32      b32;
 typedef char*       Str0;
 typedef const char* const_Str0;
 
+typedef union
+{
+	u32 dec;
+	u8  oct[4];
+} ipv4_addr_t;
+
 
 
 
@@ -90,7 +96,7 @@ i32   platform_memory_free  (void* addr, size_t size);
 
 
 void platform_print  (const_Str0 file, int line, u32 level, const_Str0 prefix, const_Str0 format, ...);
-i32  platform_syslog (u8 address[4], const_Str0 userid, const_Str0 method, const_Str0 path, u32 minor, u32 status, u32 resource_size);
+i32  platform_syslog (ipv4_addr_t address, const_Str0 userid, const_Str0 method, const_Str0 path, u32 minor, u32 status, u32 resource_size);
 
 
 i32 platform_thread_init (thread_t* thread, thread_callback_t* callback, void* callback_arg);
