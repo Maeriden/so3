@@ -302,7 +302,7 @@ HTTP_STATUS platform_put_resource(State* state, Str0 full_path, const u8* conten
 			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
-	if(create_resource_path(full_path, strlen(full_path)) != 0)
+	if(create_resource_path(full_path) != 0)
 	{
 		PRINT_ERROR("create_resource_path(%s) failed", full_path);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
