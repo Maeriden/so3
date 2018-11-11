@@ -264,7 +264,7 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 		if(request->path[request->path_len-1] == '/')
 		{
 			request->path[request->path_len-1] = 0;
-			request->path -= 1;
+			request->path_len -= 1;
 		}
 		
 		Str0 full_path = str0_cat0(state->config.documents_root, request->path);
@@ -275,7 +275,7 @@ HTTP_STATUS server_handle_request(State* state, socket_t socket, HTTPRequest* re
 		}
 		
 		HTTP_STATUS http_status = 0;
-		if(str0_beginswith0(request->path, "/commands"))
+		if(str0_beginswith0(request->path, "/commands/"))
 		{
 			http_status = platform_run_resource(state, full_path, out_response, out_response_size);
 			if(HTTP_STATUS_IS_SERVER_ERROR(http_status))
