@@ -125,6 +125,7 @@ void thread_pool_task(void* param)
 	int         socket      = args->socket;
 	u16         listen_port = args->listen_port;
 	ipv4_addr_t address     = args->address;
+	memory_free(ThreadTaskArgs, args, 1);
 	
 	u32 encryption_key = 0;
 	if(listen_port == state->config.listen_port_crypt)
@@ -135,8 +136,6 @@ void thread_pool_task(void* param)
 	server_serve_client(state, socket, encryption_key, address);
 	shutdown(socket, SOCKET_SHUTDOWN_RW);
 	close(socket);
-	
-	memory_free(ThreadTaskArgs, args, 1);
 }
 
 
