@@ -47,9 +47,9 @@ dd if=/dev/urandom bs=1M count=32 | tr "\000" "\377" > "${docsdir}/rand.bin" # 3
 
 mkdir -p "${docsdir}/subdir"
 
-f="${docsdir}/subdir/1.txt" echo "Contenuto di ${f}" > "${f}"
-f="${docsdir}/subdir/2.txt" echo "Contenuto di ${f}" > "${f}"
-f="${docsdir}/subdir/3.txt" echo "Contenuto di ${f}" > "${f}"
+echo "Contenuto di ${docsdir}/subdir/1.txt" > "${docsdir}/subdir/1.txt"
+echo "Contenuto di ${docsdir}/subdir/2.txt" > "${docsdir}/subdir/2.txt"
+echo "Contenuto di ${docsdir}/subdir/3.txt" > "${docsdir}/subdir/3.txt"
 
 
 
