@@ -339,7 +339,7 @@ static
 HTTP_STATUS get_directory_listing(State* state, int resource_fd, const_Str0 full_path, u8** out_content, u32* out_content_size)
 {
 	struct dirent** entries = NULL;
-	int entries_count = scandirat(resource_fd, "", &entries, NULL, alphasort);
+	int entries_count = scandirat(resource_fd, ".", &entries, NULL, alphasort);
 	if(entries_count < 0)
 	{
 		PRINT_ERROR("scandir(%s) failed: errno = %s", full_path, errno_as_string);
