@@ -240,6 +240,26 @@ int accept_nointr(int sockfd, struct sockaddr_in* sockaddr, socklen_t* addrlen, 
 }
 
 
+ssize_t recv_nointr(int sockfd, void* buf, size_t len, int flags)
+{
+	ssize_t recv_count = 0;
+	do {
+		recv_count = recv(sockfd, buf, len, flags);
+	} while(recv_count == -1 && errno == EINTR);
+	return recv_count;
+}
+
+
+ssize_t send_nointr(int sockfd, void* buf, size_t len, int flags)
+{
+	ssize_t sent_count = 0;
+	do {
+		sent_count = send(sockfd, buf, len, flags);
+	} while(sent_count == -1 && errno == EINTR);
+	return sent_count;
+}
+
+
 i32 read_entire_file(const_Str0 path, char** out_content, u32* out_content_size)
 {
 	// TODO: Configurable users path?
