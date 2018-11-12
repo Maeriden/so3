@@ -184,23 +184,12 @@ i32 platform_recv(socket_t socket, u8* buffer, u32 buffer_size, u32* out_recv_co
 {
 	*out_recv_count = 0;
 	
-	ssize_t recv_count = 0;
-	do {
-		recv_count = recv(socket, buffer, buffer_size, 0);
-		if(recv_count == -1)
-		{
-			if(errno != EINTR)
-			{
-				PRINT_ERROR("recv() failed: errno = %s", errno_as_string);
-				return -1;
-			}
-		}
-		else if(recv_count == 0)
-		{
-			break;
-		}
-		
-	} while(recv_count == -1 && errno == EINTR);
+	ssize_t recv_count = recv_nointr(socket, buffer, buffer_size, 0);
+	if(recv_count == -1 && errno != ECONNRESET)
+	{
+		PRINT_ERROR("recv() failed: errno = %s", errno_as_string);
+		return -1;
+	}
 	
 	*out_recv_count = recv_count;
 	return 0;
@@ -213,33 +202,34 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 	if(!(buffer && buffer_size))
 		return 0;
 	
+	i32 error = 0;
 	u32 sent_total = 0;
 	while(sent_total < buffer_size)
 	{
 		u8* remaining_data      = buffer      + sent_total;
 		u32 remaining_data_size = buffer_size - sent_total;
 		
-		ssize_t sent_count = send(socket, remaining_data, remaining_data_size, 0);
+		ssize_t sent_count = send_nointr(socket, remaining_data, remaining_data_size, MSG_NOSIGNAL);
 		if(sent_count == -1)
 		{
-			if(errno != EINTR)
+			if(errno != ECONNRESET && errno != EPIPE)
 			{
 				PRINT_ERROR("send() failed: errno = %s", errno_as_string);
-				return -1;
+				error = -1;
 			}
+			break;
 		}
-		else if(sent_count == 0)
+		
+		if(sent_count == 0)
 		{
 			break;
 		}
-		else
-		{
-			sent_total += sent_count;
-		}
+		
+		sent_total += sent_count;
 	}
 	
 	*out_sent_count = sent_total;
-	return 0;
+	return error;
 }
 
 
