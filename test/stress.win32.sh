@@ -7,7 +7,7 @@ function get()
 	local rempath="$3"
 	# local locpath="$4"
 	
-	curl --http1.0 --basic "root:root@127.0.0.1:8080/${rempath}" > "${logfile}" 2>&1
+	curl --http1.0 --basic "root:root@127.0.0.1:8080${rempath}" > "${logfile}" 2>&1
 	if [ $? == 0 ]; then
 		echo "Request $i completed"
 		rm "${logfile}"
@@ -23,7 +23,7 @@ function put()
 	local rempath="$3"
 	local locpath="$4"
 	
-	curl --http1.0 --basic --upload "${locpath}" "root:root@127.0.0.1:8080/${rempath}" > "${logfile}" 2>&1
+	curl --http1.0 --basic --upload "${locpath}" "root:root@127.0.0.1:8080${rempath}" > "${logfile}" 2>&1
 	if [ $? == 0 ]; then
 		echo "Request $i completed"
 		rm "${logfile}"
@@ -58,14 +58,14 @@ case "${1}" in
 	
 "GET")
 	for (( i = 1; i <= ${request_count}; ++i )); do
-		get $i "${logpath}/$i.txt" "file" &
+		get $i "${logpath}/$i.txt" "/file.txt" &
 	done
 	wait
 	;;
 
 "PUT")
 	for (( i = 1; i <= ${request_count}; ++i )); do
-		put $i "${logpath}/$i.txt" "${datedir}/$i.txt" "putfile.txt" &
+		put $i "${logpath}/$i.txt" "/${datedir}/$i.txt" "file.txt" &
 	done
 	wait
 	;;
