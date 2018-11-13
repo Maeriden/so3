@@ -75,48 +75,39 @@ Str0 server_extract_userid(HTTPRequest* request)
 
 
 static
-u32 server_format_response(u8* buffer, size_t buffer_size, u32 status, u8* content, u32 content_len)
+i32 server_send_response(socket_t socket, u32 http_status, u8* content, u32 content_len)
 {
-	static const_Str0 FORMAT_OK = "\
+	static const_Str0 HEADERS_OK = "\
 HTTP/1.0 %u %s\r\n\
 Server: os3-1701014/1.0.0\r\n\
 Content-Type: text/plain\r\n\
 Content-Length: %u\r\n\
-\r\n\
-%.*s";
+\r\n";
 	
-	static const_Str0 FORMAT_UNAUTHORIZED = "\
+	static const_Str0 HEADERS_UNAUTHORIZED = "\
 HTTP/1.0 %u %s\r\n\
 Server: os3-1701014/1.0.0\r\n\
 Content-Type: text/plain\r\n\
 Content-Length: %u\r\n\
 WWW-Authenticate: Basic\r\n\
-\r\n\
-%.*s";
+\r\n";
 	
-	const_Str0 format = FORMAT_OK;
-	if(status == HTTP_STATUS_UNAUTHORIZED)
-		format = FORMAT_UNAUTHORIZED;
+	const_Str0 format = HEADERS_OK;
+	if(http_status == HTTP_STATUS_UNAUTHORIZED)
+		format = HEADERS_UNAUTHORIZED;
 	
-	return snprintf(buffer, buffer_size, format,
-	                status, http_reason(status),
-	                content_len,
-	                content_len, content);
-}
-
-
-static
-i32 server_send_response(socket_t socket, u32 http_status, u8* content, u32 content_size)
-{
-	u32  buffer_len = server_format_response(NULL, 0, http_status, content, content_size);
-	Str0 buffer     = memory_alloc(char, buffer_len+1);
+	u32  headers_len = snprintf(NULL, 0, format, http_status, http_reason(http_status), content_len);
+	u32  buffer_size = headers_len + 1 + content_len;
+	Str0 buffer      = memory_alloc(char, buffer_size);
 	if(!buffer)
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	server_format_response(buffer, buffer_len+1, http_status, content, content_size);
+	
+	snprintf(buffer, headers_len+1, format, http_status, http_reason(http_status), content_len);
+	memcpy(buffer+headers_len, content, content_len);
 	
 	u32 sent_count = 0;
-	i32 error = platform_send(socket, buffer, buffer_len, &sent_count);
-	memory_free(char, buffer, buffer_len+1);
+	i32 error = platform_send(socket, buffer, headers_len+content_len, &sent_count);
+	memory_free(char, buffer, buffer_size);
 	if(error)
 	{
 		PRINT_ERROR("platform_send() failed");
