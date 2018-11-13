@@ -54,8 +54,8 @@ i32 platform_syslog(ipv4_addr_t address, const_Str0 userid, const_Str0 method, c
 {
 	// 80.116.239.218 - - [17/Jul/2011:18:29:19 +0100]  "GET /attivita/convegno1/libro1/gz/06-trio.ps.gz HTTP/1.0" 200 65536
 	static const_Str0 STRFTIME_FORMAT = "%d/%b/%Y:%H:%M:%S %z";
-	time_t now   = time(NULL);
-	struct tm tm = {0};
+	time_t now = time(NULL);
+	struct tm tm;
 	localtime_s(&tm, &now);
 	char strftime_buffer[64] = {0};
 	strftime(strftime_buffer, sizeof(strftime_buffer), STRFTIME_FORMAT, &tm);
@@ -81,11 +81,15 @@ i32 platform_syslog(ipv4_addr_t address, const_Str0 userid, const_Str0 method, c
 		method, path, minor,
 		status, resource_size);
 
+	ASSERT(mutex_platform_print != NULL);
 	if(WaitForSingleObject(mutex_platform_print, INFINITE) == WAIT_OBJECT_0)
 	{
 		State* state = &global_state;
 		DWORD write_count;
 		WriteFile(state->syslog_handle, buffer, buffer_len, &write_count, NULL);
+		#if ENABLE_DEBUG
+		fprintf(stderr, buffer);
+		#endif
 		ReleaseMutex(mutex_platform_print);
 	}
 	else
@@ -264,7 +268,7 @@ static
 i32 create_resource_path(Str0 full_path)
 {
 	u32 full_path_len = strlen(full_path);
-	
+
 	// TODO: Remove MAX_PATH limitation by using CreateDirectoryW()
 	if(full_path_len >= 248)
 	{
@@ -279,7 +283,7 @@ i32 create_resource_path(Str0 full_path)
 			full_path[i] = 0;
 			BOOL success = CreateDirectoryA(full_path, NULL);
 			full_path[i] = '/';
-			
+
 			if(!success && GetLastError() != ERROR_ALREADY_EXISTS)
 			{
 				PRINT_ERROR("CreateDirectoryA(%s) failed: GLE = %s", full_path, LastErrorAsString);

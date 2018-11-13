@@ -60,12 +60,12 @@ void platform_print(const_Str0 file, int line, u32 level, const_Str0 prefix, con
 i32 platform_syslog(ipv4_addr_t address, const_Str0 userid, const_Str0 method, const_Str0 path, u32 minor, u32 status, u32 resource_size)
 {
 	// 80.116.239.218 - - [17/Jul/2011:18:29:19 +0100]  "GET /attivita/convegno1/libro1/gz/06-trio.ps.gz HTTP/1.0" 200 65536
-	static const_Str0 strftime_format = "%d/%b/%Y:%H:%M:%S %z";
-	time_t now   = time(NULL);
+	static const_Str0 STRFTIME_FORMAT = "%d/%b/%Y:%H:%M:%S %z";
+	time_t now = time(NULL);
 	struct tm tm;
 	localtime_r(&now, &tm);
 	char strftime_buffer[64] = {};
-	strftime(strftime_buffer, sizeof(strftime_buffer), strftime_format, &tm);
+	strftime(strftime_buffer, sizeof(strftime_buffer), STRFTIME_FORMAT, &tm);
 	
 	if(!userid || strlen(userid) == 0)
 		userid = "-";
@@ -185,10 +185,13 @@ i32 platform_recv(socket_t socket, u8* buffer, u32 buffer_size, u32* out_recv_co
 	*out_recv_count = 0;
 	
 	ssize_t recv_count = recv_nointr(socket, buffer, buffer_size, 0);
-	if(recv_count == -1 && errno != ECONNRESET)
+	if(recv_count == -1)
 	{
-		PRINT_ERROR("recv() failed: errno = %s", errno_as_string);
-		return -1;
+		if(errno != ECONNRESET)
+		{
+			PRINT_ERROR("recv() failed: errno = %s", errno_as_string);
+			return -1;
+		}
 	}
 	
 	*out_recv_count = recv_count;
