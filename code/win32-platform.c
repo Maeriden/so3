@@ -531,8 +531,20 @@ static
 HTTP_STATUS platform_run_resource(State* state, Str0 full_path, u8** out_output, u32* out_output_size)
 {
 	ASSERT(full_path != NULL);
+	*out_output      = NULL;
+	*out_output_size = 0;
+
+	WIN32_FILE_ATTRIBUTE_DATA attrs;
+	if(!GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
+	{
+		if(GetLastError() == ERROR_FILE_NOT_FOUND)
+			return HTTP_STATUS_NOT_FOUND;
+		PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
+		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
+	}
+
 	// TODO: Check resource type: must be an executable
-	
+
 	SECURITY_ATTRIBUTES pipes_attrs = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE};
 	HANDLE pipe_stdou[2];
 	if(!CreatePipe(pipe_stdou, pipe_stdou+1, &pipes_attrs, 0))
@@ -564,7 +576,7 @@ HTTP_STATUS platform_run_resource(State* state, Str0 full_path, u8** out_output,
 	}
 	CloseHandle(pi.hThread);
 	CloseHandle(pipe_stdou[1]);
-	
+
 	// TODO: WaitForInputIdle() if we want to add support for command input
 
 	HTTP_STATUS status = get_command_result(pi.hProcess, pipe_stdou[0], out_output, out_output_size);
