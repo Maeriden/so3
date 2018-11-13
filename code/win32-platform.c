@@ -92,6 +92,7 @@ i32 platform_syslog(ipv4_addr_t address, const_Str0 userid, const_Str0 method, c
 	{
 		PRINT_ERROR("WaitForSingleObject() failed");
 	}
+	memory_free(char, buffer, buffer_len+1);
 	return 0;
 }
 
