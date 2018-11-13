@@ -203,8 +203,12 @@ i32 platform_recv(socket_t socket, u8* buffer, u32 buffer_size, u32* out_recv_co
 	int recv_count = recv(socket, buffer, buffer_size, 0);
 	if(recv_count == SOCKET_ERROR)
 	{
-		PRINT_ERROR("recv() failed: WSALE = %s", WSALastErrorAsString);
-		return -1;
+		int wsale = WSAGetLastError();
+		if(wsale != WSAECONNRESET)
+		{
+			PRINT_ERROR("recv() failed: WSALE = %s", WSALastErrorAsString);
+			return -1;
+		}
 	}
 
 	*out_recv_count = recv_count;
@@ -218,6 +222,7 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 	if(!(buffer && buffer_size))
 		return 0;
 
+	i32 error = 0;
 	u32 sent_total = 0;
 	while(sent_total < buffer_size)
 	{
@@ -227,18 +232,25 @@ i32 platform_send(socket_t socket, u8* buffer, u32 buffer_size, u32* out_sent_co
 		int sent_count = send(socket, remaining_data, remaining_data_size, 0);
 		if(sent_count == SOCKET_ERROR)
 		{
-			PRINT_ERROR("send() failed: WSALE = %s", WSALastErrorAsString);
-			return -1;
+			int wsale = WSAGetLastError();
+			if(wsale != WSAECONNRESET)
+			{
+				PRINT_ERROR("send() failed: WSALE = %s", WSALastErrorAsString);
+				error = -1;
+			}
+			break;
 		}
 
 		if(sent_count == 0)
+		{
 			break;
+		}
 
 		sent_total += sent_count;
 	}
 
 	*out_sent_count = sent_total;
-	return 0;
+	return error;
 }
 
 
