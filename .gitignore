@@ -6,5 +6,12 @@ obj/
 *.exe
 *.obj
 *.pdb
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
 
 *.o
+
+*.bin
+*.txt
