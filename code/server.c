@@ -25,7 +25,7 @@ typedef struct HTTPRequest
 
 
 static
-const_Str0 http_reason(u32 status_code)
+const_Str0 get_http_reason(u32 status_code)
 {
 	switch(status_code) {
 		case 100: return "Continue";
@@ -39,7 +39,7 @@ const_Str0 http_reason(u32 status_code)
 		case 417: return "Expectation Failed";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
-	} return "";
+	} return "UNKNOWN";
 }
 
 
@@ -75,35 +75,73 @@ Str0 server_extract_userid(HTTPRequest* request)
 
 
 static
-i32 server_send_response(socket_t socket, u32 http_status, u8* content, u32 content_len)
+i32 server_send_response(socket_t socket, HTTP_STATUS http_status, u8* content, u32 content_len)
 {
-	static const_Str0 HEADERS_OK = "\
-HTTP/1.0 %u %s\r\n\
-Server: os3-1701014/1.0.0\r\n\
-Content-Type: text/plain\r\n\
-Content-Length: %u\r\n\
-\r\n";
+	const_Str0 http_reason     = get_http_reason(http_status);
+	u32        http_reason_len = strlen(http_reason);
 	
-	static const_Str0 HEADERS_UNAUTHORIZED = "\
-HTTP/1.0 %u %s\r\n\
-Server: os3-1701014/1.0.0\r\n\
-Content-Type: text/plain\r\n\
-Content-Length: %u\r\n\
-WWW-Authenticate: Basic\r\n\
-\r\n";
+	#define STRLEN(s) ( sizeof(s)-1 )
+	u32 headers_len = 0;
+	{
+		headers_len += STRLEN("HTTP/1.0 000 \r\n") + http_reason_len;
+		headers_len += STRLEN("Server: os3-1701014/1.0.0\r\n");
+		
+		if(http_status == HTTP_STATUS_UNAUTHORIZED)
+		{
+			headers_len += STRLEN("WWW-Authenticate: Basic\r\n");
+		}
+		
+		if(content_len > 0)
+		{
+			headers_len += STRLEN("Content-Type: text/plain\r\n");
+			headers_len += STRLEN("Content-Length: \r\n") + digits_count_u64(content_len);
+		}
+		headers_len += STRLEN("\r\n");
+	}
+	#undef STRLEN
 	
-	const_Str0 format = HEADERS_OK;
-	if(http_status == HTTP_STATUS_UNAUTHORIZED)
-		format = HEADERS_UNAUTHORIZED;
-	
-	u32  headers_len = snprintf(NULL, 0, format, http_status, http_reason(http_status), content_len);
-	u32  buffer_size = headers_len + 1 + content_len;
+	u32  buffer_size = headers_len + content_len;
 	Str0 buffer      = memory_alloc(char, buffer_size);
 	if(!buffer)
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	
-	snprintf(buffer, headers_len+1, format, http_status, http_reason(http_status), content_len);
-	memcpy(buffer+headers_len, content, content_len);
+	#define BUFFER_APPEND(s) memcpy(buffer+offset, s, sizeof(s)-1); offset += sizeof(s)-1
+	{
+		u32 offset = 0;
+		
+		BUFFER_APPEND("HTTP/1.0");
+		buffer[offset++] = ' ';
+		buffer[offset++] = ( (http_status / 100)     ) + '0';
+		buffer[offset++] = ( (http_status / 10) % 10 ) + '0';
+		buffer[offset++] = ( (http_status % 10)      ) + '0';
+		buffer[offset++] = ' ';
+		memcpy(buffer+offset, http_reason, http_reason_len);
+		offset += http_reason_len;
+		BUFFER_APPEND("\r\n");
+		
+		BUFFER_APPEND("Server: os3-1701014/1.0.0");
+		BUFFER_APPEND("\r\n");
+		
+		if(http_status == HTTP_STATUS_UNAUTHORIZED)
+		{
+			BUFFER_APPEND("WWW-Authenticate: Basic");
+			BUFFER_APPEND("\r\n");
+		}
+		
+		if(content_len > 0)
+		{
+			BUFFER_APPEND("Content-Type: text/plain");
+			BUFFER_APPEND("\r\n");
+			
+			BUFFER_APPEND("Content-Length: ");
+			offset += format_number(buffer+offset, buffer_size-offset, content_len);
+			BUFFER_APPEND("\r\n");
+		}
+		
+		BUFFER_APPEND("\r\n");
+		memcpy(buffer+offset, content, content_len);
+	}
+	#undef BUFFER_APPEND
 	
 	u32 sent_count = 0;
 	i32 error = platform_send(socket, buffer, headers_len+content_len, &sent_count);
