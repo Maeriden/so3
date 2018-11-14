@@ -391,6 +391,8 @@ HTTP_STATUS platform_get_resource(State* state, Str0 full_path, u8** out_content
 	int resource_fd = open_nointr(full_path, O_RDONLY|O_CLOEXEC, 0);
 	if(resource_fd == -1)
 	{
+		if(errno == ENOTDIR)
+			return HTTP_STATUS_NOT_FOUND;
 		if(errno == ENOENT)
 			return HTTP_STATUS_NOT_FOUND;
 		PRINT_ERROR("open(%s) failed: errno = %s", full_path, errno_as_string);
