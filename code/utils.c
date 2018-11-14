@@ -14,6 +14,43 @@
 
 
 
+u32 digits_count_u64(u64 n)
+{
+	if(n <= 9ULL)                   return  1;
+	if(n <= 99ULL)                  return  2;
+	if(n <= 999ULL)                 return  3;
+	if(n <= 9999ULL)                return  4;
+	if(n <= 99999ULL)               return  5;
+	if(n <= 999999ULL)              return  6;
+	if(n <= 9999999ULL)             return  7;
+	if(n <= 99999999ULL)            return  8;
+	if(n <= 999999999ULL)           return  9;
+	if(n <= 9999999999ULL)          return 10;
+	if(n <= 99999999999ULL)         return 11;
+	if(n <= 999999999999ULL)        return 12;
+	if(n <= 9999999999999ULL)       return 13;
+	if(n <= 99999999999999ULL)      return 14;
+	if(n <= 999999999999999ULL)     return 15;
+	if(n <= 9999999999999999ULL)    return 16;
+	if(n <= 99999999999999999ULL)   return 17;
+	if(n <= 999999999999999999ULL)  return 18;
+	if(n <= 9999999999999999999ULL) return 19;
+	return 20;
+}
+
+
+u32 format_number(char* buffer, u32 buffer_len, u64 n)
+{
+	u32 digits_count = digits_count_u64(n);
+	ASSERT(buffer_len >= digits_count);
+	for(u32 d = digits_count; d > 0; --d)
+	{
+		buffer[d-1] = (n % 10) + '0';
+		n /= 10;
+	}
+	return digits_count;
+}
+
 
 char* _strN_dupN(const char* str, u32 len, const char* __file__, int __line__)
 {
