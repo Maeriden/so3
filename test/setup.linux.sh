@@ -50,13 +50,3 @@ mkdir -p "${docsdir}/subdir"
 echo "Contenuto di ${docsdir}/subdir/1.txt" > "${docsdir}/subdir/1.txt"
 echo "Contenuto di ${docsdir}/subdir/2.txt" > "${docsdir}/subdir/2.txt"
 echo "Contenuto di ${docsdir}/subdir/3.txt" > "${docsdir}/subdir/3.txt"
-
-
-
-if [ ! -f "file.txt" ]; then
-	echo "Contenuto di file.txt" > "file.txt"
-fi
-
-if [ ! -f "rand.bin" ]; then
-	dd if=/dev/urandom bs=1M count=16 | tr "\000" "\377" > "rand.bin"
-fi
