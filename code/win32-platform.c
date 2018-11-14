@@ -311,7 +311,6 @@ HTTP_STATUS platform_put_resource(State* state, Str0 full_path, const u8* conten
 	{
 		case ERROR_FILE_NOT_FOUND:
 		case ERROR_PATH_NOT_FOUND:
-		case ERROR_INVALID_NAME:
 			break;
 
 		default:
@@ -421,20 +420,26 @@ HTTP_STATUS platform_get_resource(State* state, Str0 full_path, u8** out_content
 	*out_content_size = 0;
 
 	WIN32_FILE_ATTRIBUTE_DATA attrs;
-	if(!GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
+	if(GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
 	{
-		if(GetLastError() == ERROR_FILE_NOT_FOUND)
-			return HTTP_STATUS_NOT_FOUND;
-		PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
-		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
-	}
+		if(attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			HTTP_STATUS status = get_directory_listing(full_path, out_content, out_content_size);
 
-	if(attrs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			if(HTTP_STATUS_IS_SERVER_ERROR(status))
+				PRINT_ERROR("get_directory_listing(%s) failed", full_path);
+			return status;
+		}
+	}
+	else switch(GetLastError())
 	{
-		HTTP_STATUS status = get_directory_listing(full_path, out_content, out_content_size);
-		if(status)
-			PRINT_ERROR("get_directory_listing(%s) failed", full_path);
-		return status;
+		case ERROR_FILE_NOT_FOUND:
+		case ERROR_PATH_NOT_FOUND:
+			return HTTP_STATUS_NOT_FOUND;
+
+		default:
+			PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
+			return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
 
 	HANDLE resource_fd = CreateFileA(full_path, FILE_GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -554,8 +559,12 @@ HTTP_STATUS platform_run_resource(State* state, Str0 full_path, u8** out_output,
 	WIN32_FILE_ATTRIBUTE_DATA attrs;
 	if(!GetFileAttributesExA(full_path, GetFileExInfoStandard, &attrs))
 	{
-		if(GetLastError() == ERROR_FILE_NOT_FOUND)
-			return HTTP_STATUS_NOT_FOUND;
+		switch(GetLastError())
+		{
+			case ERROR_FILE_NOT_FOUND:
+			case ERROR_PATH_NOT_FOUND:
+				return HTTP_STATUS_NOT_FOUND;
+		}
 		PRINT_ERROR("GetFileAttributesExA(%s) failed", full_path);
 		return HTTP_STATUS_INTERNAL_SERVER_ERROR;
 	}
