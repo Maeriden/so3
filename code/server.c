@@ -1,10 +1,6 @@
 #include "platform.h"
 #include "base64.c"
 
-#define HTTP_STATUS_IS_SUCCESS(status)      ( 200 <= (status) && (status) <= 299 )
-#define HTTP_STATUS_IS_CLIENT_ERROR(status) ( 400 <= (status) && (status) <= 499 )
-#define HTTP_STATUS_IS_SERVER_ERROR(status) ( 500 <= (status) && (status) <= 599 )
-
 
 typedef struct phr_header PhrHeader;
 

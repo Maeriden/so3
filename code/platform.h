@@ -25,10 +25,10 @@ typedef union
 
 
 
-#define until(expr) while(!(expr))
+#define until(expr)    while(!(expr))
 #define ARRAY_COUNT(a) ( sizeof(a) / sizeof(*a) )
 #define MIN(a, b)      ( (a) < (b) ? (a) : (b) )
-#define LOG_LEVEL_MAX 3
+#define LOG_LEVEL_MAX  3
 
 
 
@@ -140,6 +140,9 @@ HTTP_STATUS platform_put_resource (State* state, Str0 full_path, const u8* conte
 HTTP_STATUS platform_get_resource (State* state, Str0 full_path, u8** out_content, u32* out_content_size);
 HTTP_STATUS platform_run_resource (State* state, Str0 full_path, u8** out_content, u32* out_content_size);
 
+#define HTTP_STATUS_IS_SUCCESS(status)      ( 200 <= (status) && (status) <= 299 )
+#define HTTP_STATUS_IS_CLIENT_ERROR(status) ( 400 <= (status) && (status) <= 499 )
+#define HTTP_STATUS_IS_SERVER_ERROR(status) ( 500 <= (status) && (status) <= 599 )
 
 
 
