@@ -542,9 +542,11 @@ i32 scandir(const_Str0 dirname, struct dirent*** namelist, scandir_select_t* sel
 	struct dirent** dir = 0;
 	do {
 		int namelen = strlen(find.cFileName);
-		struct dirent* selectDir = malloc(sizeof(struct dirent) + namelen);
+		struct dirent* selectDir = calloc(sizeof(struct dirent) + namelen, 1);
 		selectDir->d_attr = find.dwFileAttributes;
-		strcpy_s(selectDir->d_name, namelen, find.cFileName);
+		// TODO: Find out why this crashed
+		// strcpy_s(selectDir->d_name, namelen, find.cFileName);
+		memcpy(selectDir->d_name, find.cFileName, namelen);
 
 		if(!select || (*select)(selectDir))
 		{
